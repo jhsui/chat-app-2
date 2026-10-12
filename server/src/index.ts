@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "./app.js";
+import type { DbConfig } from "./db.js";
 
 // Works from both src/ (tsx in dev) and dist/ (compiled), since both sit one level below server/.
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -13,12 +14,46 @@ if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
 
 const PORT = Number(process.env.PORT) || 3001;
 
-const { httpServer } = createServer({
-  dbFile: process.env.DB_FILE || path.join(serverRoot, "data", "chat.db"),
+// Real Postgres when DATABASE_URL is set (e.g. on Railway); otherwise an
+// embedded Postgres (PGlite) stored in server/data/pglite, so local
+// development needs nothing installed.
+const databaseUrl = process.env.DATABASE_URL;
+const dbConfig: DbConfig = databaseUrl
+  ? { databaseUrl }
+  : {
+      pgliteDir:
+        process.env.PGLITE_DIR || path.join(serverRoot, "data", "pglite"),
+    };
+
+const chat = await createServer({
+  db: dbConfig,
   clientDist: path.join(serverRoot, "..", "client", "dist"),
   corsOrigin: process.env.CLIENT_ORIGIN, // only needed if the client is hosted on another domain
 });
 
-httpServer.listen(PORT, () => {
-  console.log(`Chat server listening on http://localhost:${PORT}`);
+chat.httpServer.listen(PORT, () => {
+  const where =
+    "pgliteDir" in dbConfig
+      ? `embedded PGlite in ${dbConfig.pgliteDir}`
+      : "PostgreSQL (DATABASE_URL)";
+  console.log(
+    `Chat server listening on http://localhost:${PORT} — database: ${where}`,
+  );
 });
+
+// Close the database cleanly when the process is stopped (Ctrl+C, a restart in
+// dev, or a redeploy on a host like Railway).
+let shuttingDown = false;
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    chat.close().then(
+      () => process.exit(0),
+      (err) => {
+        console.error(err);
+        process.exit(1);
+      },
+    );
+  });
+}

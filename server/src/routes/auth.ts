@@ -53,13 +53,18 @@ export function authRoutes(db: Db): Router {
     }
 
     const { username, password } = result.value;
-    if (db.findUserByUsername(username)) {
+    if (await db.findUserByUsername(username)) {
       res.status(409).json({ error: "That username is taken" });
       return;
     }
 
     const hash = await bcrypt.hash(password, 10);
-    const user = db.createUser(username, hash);
+    const user = await db.createUser(username, hash);
+    if (!user) {
+      // Someone else registered the same name between the check and the insert.
+      res.status(409).json({ error: "That username is taken" });
+      return;
+    }
     setAuthCookie(res, user);
     res.status(201).json({ user: { id: user.id, username: user.username } });
   });
@@ -70,7 +75,7 @@ export function authRoutes(db: Db): Router {
     >;
     const record =
       typeof username === "string"
-        ? db.findUserByUsername(username)
+        ? await db.findUserByUsername(username)
         : undefined;
     const ok =
       record &&

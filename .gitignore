@@ -2,6 +2,7 @@ node_modules/
 client/dist/
 server/dist/
 server/data/
+.vite/
 .env
 .DS_Store
 *.log

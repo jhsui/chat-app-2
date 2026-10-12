@@ -1,7 +1,7 @@
 {
   "name": "server",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.4.0",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -12,20 +12,21 @@
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^13.0.3",
     "cookie": "^1.0.2",
     "cookie-parser": "^1.4.7",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "pg": "^8.23.1",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^9.6.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.15.0",
+    "@types/pg": "^8.23.1",
     "socket.io-client": "^4.8.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"

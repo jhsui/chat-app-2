@@ -62,9 +62,9 @@ export function clearAuthCookie(res: Response): void {
 
 /** Express middleware: rejects the request unless a valid auth cookie is present. */
 export function requireAuth(db: Db): RequestHandler {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const userId = verifyToken(req.cookies?.[COOKIE_NAME]);
-    const user = userId === null ? undefined : db.findUserById(userId);
+    const user = userId === null ? undefined : await db.findUserById(userId);
     if (!user) {
       res.status(401).json({ error: "Not signed in" });
       return;

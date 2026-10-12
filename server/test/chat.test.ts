@@ -6,15 +6,31 @@ import type {
   ClientToServerEvents,
   ServerToClientEvents,
 } from "../../shared/types.js";
+import pg from "pg";
 import { createServer, type ChatApp } from "../src/app.js";
+import type { DbConfig } from "../src/db.js";
 
 type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 let server: ChatApp;
 let baseUrl: string;
 
+/**
+ * By default the tests use a throwaway in-memory PGlite database. To run them
+ * against a real Postgres server instead, set TEST_DATABASE_URL — note that
+ * the users and messages tables in that database are wiped first.
+ */
+async function testDbConfig(): Promise<DbConfig> {
+  const url = process.env.TEST_DATABASE_URL;
+  if (!url) return { pgliteDir: "memory://" };
+  const pool = new pg.Pool({ connectionString: url });
+  await pool.query("DROP TABLE IF EXISTS messages, users");
+  await pool.end();
+  return { databaseUrl: url };
+}
+
 before(async () => {
-  server = createServer({ dbFile: ":memory:" });
+  server = await createServer({ db: await testDbConfig() });
   await new Promise<void>((resolve) => server.httpServer.listen(0, resolve));
   baseUrl = `http://localhost:${(server.httpServer.address() as AddressInfo).port}`;
 });
@@ -258,5 +274,59 @@ test("people lists every other user with online status and last chat time", asyn
   assert.equal(carolEntry?.online, false);
   assert.equal(carolEntry?.lastAt, null, "alice and carol never chatted");
 
+  bSock.disconnect();
+});
+
+test("database edge cases: duplicate names and out-of-range ids", async () => {
+  // The unique index is case-insensitive, even when the route's pre-check is skipped.
+  const dana = await server.db.createUser("Dana", "hash");
+  assert.equal(dana?.username, "Dana");
+  assert.equal(await server.db.createUser("dana", "hash"), null);
+
+  // Ids bigger than a Postgres INTEGER are treated as "not found", not a crash.
+  const huge = 99_999_999_999;
+  const r = await alice.request("GET", `/api/messages/${huge}`);
+  assert.equal(r.status, 404);
+  const bobId: number = (await bob.request("GET", "/api/auth/me")).body.user.id;
+  const page = await alice.request(
+    "GET",
+    `/api/messages/${bobId}?before=${huge}`,
+  );
+  assert.equal(page.status, 200);
+
+  const sock = await socketFor(alice);
+  const ack = await sock.emitWithAck("message:send", { to: huge, body: "hi" });
+  assert.ok("error" in ack && /not found/.test(ack.error));
+  sock.disconnect();
+});
+
+test("a burst of messages arrives in the order it was sent", async () => {
+  const bobId: number = (await bob.request("GET", "/api/auth/me")).body.user.id;
+  const aliceId: number = (await alice.request("GET", "/api/auth/me")).body.user
+    .id;
+  const aSock = await socketFor(alice);
+  const bSock = await socketFor(bob);
+
+  const received: string[] = [];
+  const allIn = new Promise<void>((resolve) => {
+    bSock.on("message:new", (m) => {
+      if (m.senderId === aliceId) received.push(m.body);
+      if (received.length === 10) resolve();
+    });
+  });
+  const sent = Array.from({ length: 10 }, (_, i) => `burst ${i}`);
+  // Fire all ten without waiting for each acknowledgement.
+  await Promise.all(
+    sent.map((body) => aSock.emitWithAck("message:send", { to: bobId, body })),
+  );
+  await allIn;
+  assert.deepEqual(received, sent);
+
+  const history = (await alice.request("GET", `/api/messages/${bobId}`)).body;
+  assert.deepEqual(
+    history.messages.slice(-10).map((m: { body: string }) => m.body),
+    sent,
+  );
+  aSock.disconnect();
   bSock.disconnect();
 });

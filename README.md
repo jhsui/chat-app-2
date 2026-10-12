@@ -2,14 +2,14 @@
 
 A real-time chat web app with user accounts and private 1:1 direct messages.
 
-**Stack:** TypeScript everywhere · React 19 + Vite · Tailwind CSS v4 · Node.js + Express 5 · Socket.IO · SQLite (better-sqlite3) · bcrypt + JWT (httpOnly cookie)
+**Stack:** TypeScript everywhere · React 19 + Vite · Tailwind CSS v4 · Node.js + Express 5 · Socket.IO · PostgreSQL (node-postgres, PGlite for local dev) · bcrypt + JWT (httpOnly cookie)
 
 ## Features
 
 - Sign up / sign in with username and password (passwords hashed with bcrypt)
 - **Chats | People** tabs in the sidebar: People lists every user, online first, then by most recent chat
 - Search for people by username and start a conversation
-- Messages arrive instantly over WebSockets and are saved to SQLite
+- Messages arrive instantly over WebSockets and are saved to PostgreSQL
 - Conversation list sorted by latest message, with unread badges
 - Online / offline status, typing indicator, and "Sent / Seen" read receipts
 - Message history with "load older" pagination
@@ -28,6 +28,22 @@ Open http://localhost:5173. To try chatting with yourself, open a second browser
 (or a private window), create another account, search for the first one, and say hi.
 
 Optional: copy `server/.env.example` to `server/.env` to set your own `JWT_SECRET`, port, etc.
+
+## Database (PostgreSQL)
+
+The server talks to PostgreSQL and picks where it lives at startup:
+
+| `DATABASE_URL`                      | Database used                                                                                                                  |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| not set (default)                   | **PGlite**, real Postgres compiled to WebAssembly, running inside Node and stored in `server/data/pglite`. Nothing to install. |
+| `postgres://user:pass@host:5432/db` | That PostgreSQL server (Railway, Docker, Postgres.app, …)                                                                      |
+
+Both run exactly the same SQL (`server/src/db.ts`). Tables are created automatically on startup if they don't exist.
+
+- To use a real Postgres locally, put `DATABASE_URL=...` in `server/.env`.
+- To start over with an empty local database, stop the app and delete `server/data/pglite`.
+- To browse the data, point any Postgres client (pgAdmin, TablePlus, `psql`) at your `DATABASE_URL`. PGlite's folder can only be opened by the app itself.
+- Tests use a throwaway in-memory PGlite by default. `TEST_DATABASE_URL=postgres://... npm test` runs them against a real server instead (**it wipes the `users` and `messages` tables in that database**).
 
 ## Scripts (run from the project root)
 
@@ -60,8 +76,8 @@ To run it like production on one port: `npm run build && JWT_SECRET=something-lo
 ## How it works
 
 ```
-Browser (React)                     Server (Express + Socket.IO)            SQLite
-───────────────                     ────────────────────────────            ──────
+Browser (React)                     Server (Express + Socket.IO)            PostgreSQL
+───────────────                     ────────────────────────────            ──────────
 login / register  ── REST /api ──▶  bcrypt check, sets httpOnly JWT cookie ─▶ users
 load chats/history ── REST /api ──▶  /conversations, /messages/:userId  ───▶ messages
 send message      ── socket ─────▶  validate, save, emit to both users ───▶ messages
@@ -85,13 +101,13 @@ chat-app/
 │   ├── src/
 │   │   ├── index.ts         starts the server (loads .env)
 │   │   ├── app.ts           builds Express + Socket.IO (used by tests too)
-│   │   ├── db.ts            SQLite schema and typed queries
+│   │   ├── db.ts            Postgres schema, typed queries, pg / PGlite connection
 │   │   ├── auth.ts          JWT cookie helpers + requireAuth middleware
 │   │   ├── socket.ts        real-time events
 │   │   ├── presence.ts      online tracking
 │   │   └── routes/          auth.ts (register/login/logout/me), chat.ts (users, conversations, messages)
 │   ├── test/chat.test.ts    node:test suite (run with tsx)
-│   └── data/                SQLite database (created on first run, git-ignored)
+│   └── data/pglite/         local PGlite database (created on first run, git-ignored)
 └── client/
     ├── tsconfig.json
     ├── vite.config.ts       proxies /api and /socket.io to :3001 in dev
@@ -118,4 +134,4 @@ chat-app/
 - Image / file attachments
 - Rate limiting on login and message sending (e.g. `express-rate-limit`)
 - Edit / delete messages, emoji reactions
-- Deploy (Railway, Render or Fly.io) — set `JWT_SECRET` and `NODE_ENV=production`, and keep the SQLite file on a persistent volume
+- Deploy (Railway, Render or Fly.io) — add a Postgres database, and set `DATABASE_URL`, `JWT_SECRET` and `NODE_ENV=production`

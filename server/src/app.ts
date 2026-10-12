@@ -3,14 +3,14 @@ import cookieParser from "cookie-parser";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { openDb, type Db } from "./db.js";
+import { openDb, type Db, type DbConfig } from "./db.js";
 import { createPresence } from "./presence.js";
 import { attachSocket, type ChatServer } from "./socket.js";
 import { authRoutes } from "./routes/auth.js";
 import { chatRoutes } from "./routes/chat.js";
 
 export interface ServerOptions {
-  dbFile: string;
+  db: DbConfig;
   clientDist?: string;
   corsOrigin?: string;
 }
@@ -24,15 +24,15 @@ export interface ChatApp {
 }
 
 /**
- * Builds the whole server without listening, so tests can start it on a
- * random port with an in-memory database.
+ * Connects to the database and builds the whole server without listening, so
+ * tests can start it on a random port with a throwaway database.
  */
-export function createServer({
-  dbFile,
+export async function createServer({
+  db: dbConfig,
   clientDist,
   corsOrigin,
-}: ServerOptions): ChatApp {
-  const db = openDb(dbFile);
+}: ServerOptions): Promise<ChatApp> {
+  const db = await openDb(dbConfig);
   const presence = createPresence();
   const app = express();
 
@@ -77,10 +77,10 @@ export function createServer({
     io,
     db,
     close: () =>
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
+        // Stops Socket.IO and the HTTP server, then closes the database connection.
         io.close(() => {
-          db.close();
-          resolve();
+          db.close().then(resolve, reject);
         });
       }),
   };
