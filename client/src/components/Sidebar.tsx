@@ -16,6 +16,8 @@ interface SidebarProps {
   me: PublicUser;
   conversations: Conversation[];
   people: Person[];
+  /** Unsent text per chat, by the other person's id. Shown for chats that aren't open. */
+  drafts: ReadonlyMap<number, string>;
   /** Called when the People tab is opened, to pick up anyone who signed up since. */
   onShowPeople: () => void;
   activeId: number | undefined;
@@ -46,6 +48,15 @@ const row = {
     "px-2.5 pt-3 pb-1 text-xs font-bold tracking-wider text-muted uppercase",
   empty: "px-4 py-6 text-center text-sm text-muted",
 };
+
+/** Preview line for a chat you've typed in but not sent. */
+function DraftPreview({ text }: { text: string }) {
+  return (
+    <>
+      <span className="text-danger">Draft:</span> {text.trim()}
+    </>
+  );
+}
 
 function UnreadBadge({ count }: { count: number }) {
   if (count <= 0) return null;
@@ -85,6 +96,7 @@ export default function Sidebar({
   me,
   conversations,
   people,
+  drafts,
   onShowPeople,
   activeId,
   typing,
@@ -138,6 +150,9 @@ export default function Sidebar({
   const unreadById = new Map(
     conversations.map((c) => [c.id, c.id === activeId ? 0 : c.unread]),
   );
+  // The open chat's draft is already on screen, in its text box.
+  const draftOf = (userId: number) =>
+    userId === activeId ? undefined : drafts.get(userId);
   const onlineCount = people.filter((p) => isOnline(p)).length;
   const q = query.trim().toLowerCase();
 
@@ -240,6 +255,7 @@ export default function Sidebar({
             activeId={activeId}
             typing={typing}
             unreadById={unreadById}
+            draftOf={draftOf}
             isOnline={isOnline}
             onSelect={pick}
           />
@@ -272,8 +288,11 @@ export default function Sidebar({
           <>
             {conversations.map((c) => {
               const unread = unreadById.get(c.id) ?? 0;
+              const draft = draftOf(c.id);
               const preview = typing[c.id] ? (
                 <em className={row.typing}>typing…</em>
+              ) : draft ? (
+                <DraftPreview text={draft} />
               ) : (
                 `${c.lastSenderId === me.id ? "You: " : ""}${c.lastIsImage ? "📷 Photo" : c.lastBody}`
               );
@@ -324,6 +343,7 @@ interface PeopleListProps {
   activeId: number | undefined;
   typing: Record<number, boolean>;
   unreadById: Map<number, number>;
+  draftOf: (userId: number) => string | undefined;
   isOnline: SidebarProps["isOnline"];
   onSelect: (user: PublicUser) => void;
 }
@@ -335,6 +355,7 @@ function PeopleList({
   activeId,
   typing,
   unreadById,
+  draftOf,
   isOnline,
   onSelect,
 }: PeopleListProps) {
@@ -354,6 +375,7 @@ function PeopleList({
   const renderPerson = (p: Person): ReactNode => {
     const unread = unreadById.get(p.id) ?? 0;
     const isOn = isOnline(p);
+    const draft = draftOf(p.id);
     return (
       <li key={p.id}>
         <button
@@ -373,6 +395,8 @@ function PeopleList({
               <span className={row.sub(unread > 0)}>
                 {typing[p.id] ? (
                   <em className={row.typing}>typing…</em>
+                ) : draft ? (
+                  <DraftPreview text={draft} />
                 ) : isOn ? (
                   "Online"
                 ) : (

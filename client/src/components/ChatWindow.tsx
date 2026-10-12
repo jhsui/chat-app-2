@@ -100,6 +100,10 @@ interface ChatWindowProps {
   onSend: (body: string) => Promise<void>;
   /** Same, for a picture. */
   onSendImage: (image: ChatImage) => Promise<void>;
+  /** Text typed here earlier and not sent, to start the box with. */
+  initialDraft: string;
+  /** Called with the unsent text whenever it changes, so it can be kept for next time. */
+  onDraftChange: (text: string) => void;
   onTyping: (typing: boolean) => void;
   onBack: () => void;
   /** Opens this person's profile. */
@@ -124,11 +128,15 @@ export default function ChatWindow({
   onLoadOlder,
   onSend,
   onSendImage,
+  initialDraft,
+  onDraftChange,
   onTyping,
   onBack,
   onShowProfile,
 }: ChatWindowProps) {
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft);
+  // The latest draft, readable after an await (state in a closure would be stale).
+  const draftRef = useRef(initialDraft);
   const [error, setError] = useState("");
   // The picture waiting to be sent, shown above the text box.
   const [attachment, setAttachment] = useState<{
@@ -179,10 +187,20 @@ export default function ChatWindow({
   }, [typing]);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    const input = inputRef.current;
+    input?.focus();
+    // Continue a restored draft from its end.
+    input?.setSelectionRange(input.value.length, input.value.length);
     const t = typingState.current;
     return () => clearTimeout(t.timer);
   }, []);
+
+  /** Sets the text box and reports it, so the draft survives switching chats. */
+  function updateDraft(text: string) {
+    draftRef.current = text;
+    setDraft(text);
+    onDraftChange(text);
+  }
 
   // Free the preview's memory when the attachment is replaced, sent or removed.
   useEffect(() => {
@@ -209,7 +227,7 @@ export default function ChatWindow({
   }
 
   function handleChange(e: ChangeEvent<HTMLTextAreaElement>) {
-    setDraft(e.target.value);
+    updateDraft(e.target.value);
     setError("");
     const t = typingState.current;
     if (!t.active) {
@@ -253,7 +271,7 @@ export default function ChatWindow({
     const pending = attachment;
     if ((!body && !pending) || sendingImage) return;
     // Clear right away so fast typers can keep going; put the text back if it fails.
-    setDraft("");
+    updateDraft("");
     stopTyping();
     inputRef.current?.focus();
     try {
@@ -267,7 +285,9 @@ export default function ChatWindow({
       if (body) await onSend(body);
     } catch (err) {
       setError(errorMessage(err));
-      setDraft((current) => current || body);
+      // Unless something new was typed meanwhile. This also works if the chat
+      // was closed in the meantime: the text is there when it's opened again.
+      updateDraft(draftRef.current || body);
     } finally {
       setSendingImage(false);
     }

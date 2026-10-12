@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import type {
   ClientToServerEvents,
@@ -57,6 +57,10 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
   const typingTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>(
     {},
   );
+  // Unsent text per chat (by the other person's id), so switching chats keeps
+  // what you typed. A ref: typing shouldn't re-render the whole page.
+  const draftsRef = useRef(new Map<number, string>());
+  const [, redrawDrafts] = useReducer((n: number) => n + 1, 0);
   const onLogoutRef = useRef(onLogout);
   const onMeChangeRef = useRef(onMeChange);
 
@@ -302,6 +306,15 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
     await api.sendImage(active.id, image);
   }
 
+  function saveDraft(userId: number, text: string) {
+    if (text.trim()) draftsRef.current.set(userId, text);
+    else draftsRef.current.delete(userId);
+    // The sidebar shows drafts only for chats that aren't open, and switching
+    // chats re-renders it anyway. So a redraw is only needed in the rare case
+    // that a closed chat's draft changes (a send that failed after you left).
+    if (activeRef.current?.id !== userId) redrawDrafts();
+  }
+
   function sendTyping(isTyping: boolean) {
     if (active)
       socketRef.current?.emit("typing", { to: active.id, typing: isTyping });
@@ -326,6 +339,7 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
         me={me}
         conversations={conversations}
         people={people}
+        drafts={draftsRef.current}
         onShowPeople={refreshPeople}
         activeId={active?.id}
         typing={typing}
@@ -348,6 +362,8 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
           onLoadOlder={loadOlder}
           onSend={sendMessage}
           onSendImage={sendImage}
+          initialDraft={draftsRef.current.get(active.id) ?? ""}
+          onDraftChange={(text) => saveDraft(active.id, text)}
           onTyping={sendTyping}
           onBack={closeConversation}
           onShowProfile={() => setProfileId(active.id)}
