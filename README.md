@@ -13,7 +13,7 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 - Messages arrive instantly over WebSockets and are saved to PostgreSQL
 - **Images:** attach a picture with the image button or paste one from the clipboard; it's shrunk in the browser, stored in a private Supabase Storage bucket that only the two people in the conversation can load from, and opens full-size when clicked
 - Conversation list sorted by latest message, with unread badges
-- Online / offline status, typing indicator, and "Sent / Seen" read receipts
+- Online / offline status, typing indicator, and read receipts: one tick on each message you've sent, two blue ticks once it's been seen
 - **Replies:** hover a message (or tap the arrow on a phone) to reply to it; the reply shows a quote of the original, and clicking the quote jumps to it
 - Emoji picker in the message box, with search, categories and skin tones ([emoji-picker-react](https://github.com/ealush/emoji-picker-react), downloaded the first time it's opened)
 - Per-chat drafts: unsent text stays with its chat when you switch, with a "Draft: …" preview in the sidebar (kept until you reload)

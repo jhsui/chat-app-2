@@ -127,7 +127,7 @@ function ProfileHeader({
 }) {
   return (
     <div className="mt-3 text-center">
-      <h3 className="text-xl font-bold break-words">{nameOf(profile)}</h3>
+      <h3 className="text-xl font-bold wrap-break-word">{nameOf(profile)}</h3>
       <p className="text-sm text-muted">
         @{profile.username} ·{" "}
         <span

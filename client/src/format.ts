@@ -18,6 +18,14 @@ export function formatTime(iso: string): string {
   });
 }
 
+/** A full timestamp with the date as year-month-day, like "2026-10-12 15:04:05" (local time). */
+export function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return `${date} ${d.toLocaleTimeString()}`;
+}
+
 /** "Today", "Yesterday", or a date like "Mon, Oct 5". */
 export function formatDay(iso: string): string {
   const d = new Date(iso);

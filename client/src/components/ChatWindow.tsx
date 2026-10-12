@@ -18,6 +18,7 @@ import type {
 } from "../../../shared/types";
 import { errorMessage } from "../api.ts";
 import {
+  formatDateTime,
   formatDay,
   formatTime,
   isSameDay,
@@ -96,6 +97,41 @@ function ImageBubble({
         }}
       />
     </button>
+  );
+}
+
+/**
+ * The status of a message I sent, shown in its corner: one tick once the
+ * server has it, two blue ticks once the other person has seen it. Hovering
+ * shows when it was seen, or when it was sent if it hasn't been seen yet.
+ */
+function Ticks({ message }: { message: Message }) {
+  const seen = message.readAt !== null;
+  const label = message.readAt
+    ? `Seen ${formatDateTime(message.readAt)}`
+    : `Sent ${formatDateTime(message.createdAt)}`;
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      role="img"
+      aria-label={label}
+      className={cx("size-4", seen ? "text-sky-300" : "text-white/70")}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <title>{label}</title>
+      {seen ? (
+        <>
+          <path d="M18 6 7 17l-5-5" />
+          <path d="m22 10-7.5 7.5L13 16" />
+        </>
+      ) : (
+        <path d="M20 6 9 17l-5-5" />
+      )}
+    </svg>
   );
 }
 
@@ -448,9 +484,6 @@ export default function ChatWindow({
   const nameFor = (senderId: number) =>
     senderId === me.id ? "You" : nameOf(user);
 
-  // My most recent message shows "Sent" or "Seen".
-  const lastMineId = messages.findLast((m) => m.senderId === me.id)?.id;
-
   return (
     <section className="flex min-h-0 min-w-0 flex-col">
       <header className={ui.header}>
@@ -571,30 +604,44 @@ export default function ChatWindow({
                           {quote}
                         </div>
                       )}
-                      <ImageBubble
-                        image={m.image}
-                        title={new Date(m.createdAt).toLocaleString()}
-                        onOpen={() => setViewing(m.image)}
-                      />
+                      <div className="relative max-w-full">
+                        <ImageBubble
+                          image={m.image}
+                          title={formatDateTime(m.createdAt)}
+                          onOpen={() => setViewing(m.image)}
+                        />
+                        {mine && (
+                          <span className="absolute right-1.5 bottom-1.5 rounded-full bg-black/50 px-1 py-0.5">
+                            <Ticks message={m} />
+                          </span>
+                        )}
+                      </div>
                     </>
                   ) : (
                     <div
                       className={cx(
-                        "rounded-[18px] px-3 py-2 whitespace-pre-wrap wrap-anywhere",
+                        "relative rounded-[18px] px-3 py-2 whitespace-pre-wrap wrap-anywhere",
                         bubbleTone,
                       )}
-                      title={new Date(m.createdAt).toLocaleString()}
+                      title={formatDateTime(m.createdAt)}
                     >
                       {quote && <div className="mb-1.5">{quote}</div>}
                       {m.body}
+                      {mine && (
+                        <>
+                          {/* An empty space at the end of the text keeps the last
+                              line clear of the ticks, which sit in the corner. */}
+                          <span className="inline-block w-5" />
+                          <span className="absolute right-2.5 bottom-2.5">
+                            <Ticks message={m} />
+                          </span>
+                        </>
+                      )}
                     </div>
                   )}
                   {!groupedWithNext && (
                     <div className="mt-0.5 px-1 text-xs text-muted">
                       {formatTime(m.createdAt)}
-                      {mine &&
-                        m.id === lastMineId &&
-                        (m.readAt ? " · Seen" : " · Sent")}
                     </div>
                   )}
                 </div>
@@ -657,7 +704,7 @@ export default function ChatWindow({
           <div className="absolute bottom-full left-3 z-10 mb-2 w-[min(350px,calc(100%-1.5rem))] rounded-2xl shadow-[0_10px_40px_rgb(0_0_0/0.18)]">
             <Suspense
               fallback={
-                <div className="grid h-[380px] place-items-center rounded-2xl border border-line bg-panel text-muted">
+                <div className="grid h-95 place-items-center rounded-2xl border border-line bg-panel text-muted">
                   Loading…
                 </div>
               }
