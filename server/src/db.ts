@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import pg from "pg";
-import type { Message, PublicUser } from "../../shared/types.js";
+import type { Message, Profile, PublicUser } from "../../shared/types.js";
 
 /**
  * Where the data lives:
@@ -36,6 +36,20 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS messages_pair_idx ON messages (sender_id, recipient_id, id);
   CREATE INDEX IF NOT EXISTS messages_unread_idx ON messages (recipient_id, sender_id) WHERE read_at IS NULL;
+
+  -- Profile columns, added after the first version. "ADD COLUMN IF NOT EXISTS"
+  -- upgrades databases created before they existed: a tiny hand-written
+  -- migration. Bigger schema changes would call for a real migration tool.
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+  -- Where the avatar lives in storage, so the old file can be deleted when it's replaced.
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_key TEXT;
+`;
+
+/** The public user fields, for a query where the users table is aliased as "u". */
+const USER_COLUMNS = `
+  u.id, u.username, u.display_name AS "displayName", u.avatar_url AS "avatarUrl"
 `;
 
 const MESSAGE_COLUMNS = `
@@ -43,9 +57,8 @@ const MESSAGE_COLUMNS = `
   created_at AS "createdAt", read_at AS "readAt"
 `;
 
-export interface UserRow extends PublicUser {
-  createdAt: string;
-}
+/** A user's profile as stored, before online status is added. */
+export type ProfileRow = Omit<Profile, "online">;
 
 export interface UserWithPassword extends PublicUser {
   passwordHash: string;
@@ -62,8 +75,23 @@ export interface ConversationRow extends PublicUser {
 export interface Db {
   close(): Promise<void>;
   /** Returns null if the username is already taken. */
-  createUser(username: string, passwordHash: string): Promise<UserRow | null>;
-  findUserById(id: number): Promise<UserRow | undefined>;
+  createUser(
+    username: string,
+    passwordHash: string,
+  ): Promise<ProfileRow | null>;
+  findUserById(id: number): Promise<ProfileRow | undefined>;
+  updateProfile(
+    id: number,
+    fields: { displayName: string | null; bio: string | null },
+  ): Promise<ProfileRow>;
+  /**
+   * Sets (or clears, with nulls) the avatar. Returns the updated profile and
+   * the storage key of the previous avatar, so its file can be deleted.
+   */
+  setAvatar(
+    id: number,
+    avatar: { url: string; key: string } | null,
+  ): Promise<{ profile: ProfileRow; previousKey: string | null }>;
   findUserByUsername(username: string): Promise<UserWithPassword | undefined>;
   searchUsers(me: number, query: string): Promise<PublicUser[]>;
   /** Every user except `me`, with the time of your latest message together (or null). */
@@ -85,6 +113,16 @@ export interface Db {
     me: number,
     other: number,
   ): Promise<{ changes: number; upToId: number | null }>;
+}
+
+/** Picks just the public fields, e.g. to send a user to other clients. */
+export function toPublicUser({
+  id,
+  username,
+  displayName,
+  avatarUrl,
+}: PublicUser): PublicUser {
+  return { id, username, displayName, avatarUrl };
 }
 
 /** True if `n` can be a row id (a positive Postgres INTEGER). Use it on ids that come from the network. */
@@ -154,11 +192,12 @@ const toMessage = (row: MessageRow): Message => ({
   readAt: isoOrNull(row.readAt),
 });
 
-type UserRowRaw = PublicUser & { createdAt: Date };
-const toUser = (row: UserRowRaw): UserRow => ({
+type ProfileRowRaw = Omit<ProfileRow, "createdAt"> & { createdAt: Date };
+const toProfile = (row: ProfileRowRaw): ProfileRow => ({
   ...row,
   createdAt: iso(row.createdAt),
 });
+const PROFILE_COLUMNS = `${USER_COLUMNS}, u.bio, u.created_at AS "createdAt"`;
 
 // ---- Queries ----------------------------------------------------------------
 
@@ -178,26 +217,50 @@ export async function openDb(config: DbConfig): Promise<Db> {
 
     async createUser(username, passwordHash) {
       // ON CONFLICT covers the race where two people grab the same name at once.
-      const { rows } = await sql.query<UserRowRaw>(
-        `INSERT INTO users (username, password_hash) VALUES ($1, $2)
+      const { rows } = await sql.query<ProfileRowRaw>(
+        `INSERT INTO users AS u (username, password_hash) VALUES ($1, $2)
          ON CONFLICT ((lower(username))) DO NOTHING
-         RETURNING id, username, created_at AS "createdAt"`,
+         RETURNING ${PROFILE_COLUMNS}`,
         [username, passwordHash],
       );
-      return rows[0] ? toUser(rows[0]) : null;
+      return rows[0] ? toProfile(rows[0]) : null;
     },
 
     async findUserById(id) {
-      const { rows } = await sql.query<UserRowRaw>(
-        `SELECT id, username, created_at AS "createdAt" FROM users WHERE id = $1`,
+      const { rows } = await sql.query<ProfileRowRaw>(
+        `SELECT ${PROFILE_COLUMNS} FROM users u WHERE u.id = $1`,
         [id],
       );
-      return rows[0] && toUser(rows[0]);
+      return rows[0] && toProfile(rows[0]);
+    },
+
+    async updateProfile(id, { displayName, bio }) {
+      const { rows } = await sql.query<ProfileRowRaw>(
+        `UPDATE users u SET display_name = $2, bio = $3 WHERE u.id = $1
+         RETURNING ${PROFILE_COLUMNS}`,
+        [id, displayName, bio],
+      );
+      return toProfile(rows[0]!);
+    },
+
+    async setAvatar(id, avatar) {
+      // The CTE reads the old key from before the update, in the same statement.
+      const { rows } = await sql.query<
+        ProfileRowRaw & { previousKey: string | null }
+      >(
+        `WITH old AS (SELECT avatar_key FROM users WHERE id = $1)
+         UPDATE users u SET avatar_url = $2, avatar_key = $3 WHERE u.id = $1
+         RETURNING ${PROFILE_COLUMNS}, (SELECT avatar_key FROM old) AS "previousKey"`,
+        [id, avatar?.url ?? null, avatar?.key ?? null],
+      );
+      const { previousKey, ...profile } = rows[0]!;
+      return { profile: toProfile(profile), previousKey };
     },
 
     async findUserByUsername(username) {
       const { rows } = await sql.query<UserWithPassword>(
-        `SELECT id, username, password_hash AS "passwordHash" FROM users WHERE lower(username) = lower($1)`,
+        `SELECT ${USER_COLUMNS}, u.password_hash AS "passwordHash"
+         FROM users u WHERE lower(u.username) = lower($1)`,
         [username],
       );
       return rows[0];
@@ -207,9 +270,9 @@ export async function openDb(config: DbConfig): Promise<Db> {
       // Escape LIKE wildcards so searching for "_" or "%" matches them literally.
       const escaped = query.replace(/[\\%_]/g, (c) => `\\${c}`);
       const { rows } = await sql.query<PublicUser>(
-        `SELECT id, username FROM users
-         WHERE id <> $1 AND username ILIKE $2
-         ORDER BY lower(username) LIMIT 20`,
+        `SELECT ${USER_COLUMNS} FROM users u
+         WHERE u.id <> $1 AND (u.username ILIKE $2 OR u.display_name ILIKE $2)
+         ORDER BY lower(u.username) LIMIT 20`,
         [me, `%${escaped}%`],
       );
       return rows;
@@ -218,7 +281,7 @@ export async function openDb(config: DbConfig): Promise<Db> {
     async listPeople(me) {
       // Capped so a big user base can't produce a huge response; fine for a small app.
       const { rows } = await sql.query<PublicUser & { lastAt: Date | null }>(
-        `SELECT u.id, u.username,
+        `SELECT ${USER_COLUMNS},
                 (SELECT MAX(m.created_at) FROM messages m
                   WHERE (m.sender_id = u.id AND m.recipient_id = $1)
                      OR (m.sender_id = $1 AND m.recipient_id = u.id)) AS "lastAt"
@@ -262,7 +325,7 @@ export async function openDb(config: DbConfig): Promise<Db> {
            WHERE sender_id = $1 OR recipient_id = $1
            GROUP BY 1
          )
-         SELECT u.id, u.username,
+         SELECT ${USER_COLUMNS},
                 m.body AS "lastBody", m.sender_id AS "lastSenderId", m.created_at AS "lastAt",
                 (SELECT COUNT(*)::int FROM messages
                   WHERE sender_id = u.id AND recipient_id = $1 AND read_at IS NULL) AS unread

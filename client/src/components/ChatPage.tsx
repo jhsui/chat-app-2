@@ -11,16 +11,32 @@ import type {
 import { ApiError, api } from "../api.ts";
 import Sidebar from "./Sidebar.tsx";
 import ChatWindow from "./ChatWindow.tsx";
+import ProfileDialog from "./ProfileDialog.tsx";
 import { cx } from "../ui.ts";
 
 type ChatSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 interface ChatPageProps {
   me: PublicUser;
+  /** Your own name or avatar changed. */
+  onMeChange: (me: PublicUser) => void;
   onLogout: () => void;
 }
 
-export default function ChatPage({ me, onLogout }: ChatPageProps) {
+/** Just the public fields of a user-shaped object. */
+const publicUser = ({
+  id,
+  username,
+  displayName,
+  avatarUrl,
+}: PublicUser): PublicUser => ({
+  id,
+  username,
+  displayName,
+  avatarUrl,
+});
+
+export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [people, setPeople] = useState<Person[]>([]); // everyone, for the People tab
   const [active, setActive] = useState<PublicUser | null>(null); // the person we're chatting with
@@ -30,6 +46,7 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
   const [online, setOnline] = useState<Record<number, boolean>>({}); // live presence updates
   const [typing, setTyping] = useState<Record<number, boolean>>({});
   const [connected, setConnected] = useState(true);
+  const [profileId, setProfileId] = useState<number | null>(null); // whose profile is open
 
   // Socket handlers are registered once, so they read current values through refs.
   const socketRef = useRef<ChatSocket | null>(null);
@@ -40,6 +57,7 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
     {},
   );
   const onLogoutRef = useRef(onLogout);
+  const onMeChangeRef = useRef(onMeChange);
 
   useEffect(() => {
     conversationsRef.current = conversations;
@@ -50,6 +68,9 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
   useEffect(() => {
     onLogoutRef.current = onLogout;
   }, [onLogout]);
+  useEffect(() => {
+    onMeChangeRef.current = onMeChange;
+  }, [onMeChange]);
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -85,6 +106,9 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
         setMessages(data.messages);
         setHasMore(data.hasMore);
         setOnline((o) => ({ ...o, [user.id]: data.user.online }));
+        // Pick up their latest name/avatar too.
+        activeRef.current = publicUser(data.user);
+        setActive(activeRef.current);
         markRead(user.id);
       } finally {
         if (activeRef.current?.id === user.id) setLoading(false);
@@ -189,6 +213,19 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
       }
     });
 
+    // Someone changed their name or avatar: update them everywhere they appear.
+    socket.on("profile:updated", (user) => {
+      const apply = <T extends PublicUser>(u: T): T =>
+        u.id === user.id ? { ...u, ...user } : u;
+      setConversations((prev) => prev.map(apply));
+      setPeople((prev) => prev.map(apply));
+      if (activeRef.current?.id === user.id) {
+        activeRef.current = apply(activeRef.current);
+        setActive(activeRef.current);
+      }
+      if (user.id === me.id) onMeChangeRef.current(user);
+    });
+
     void refreshConversations();
     void refreshPeople();
 
@@ -212,7 +249,7 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
   // --- Actions ----------------------------------------------------------------
   function openConversation(user: PublicUser) {
     if (activeRef.current?.id === user.id) return;
-    const next = { id: user.id, username: user.username };
+    const next = publicUser(user);
     activeRef.current = next;
     setActive(next);
     setMessages([]);
@@ -285,6 +322,7 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
         isOnline={isOnline}
         connected={connected}
         onSelect={openConversation}
+        onShowProfile={() => setProfileId(me.id)}
         onLogout={handleLogout}
       />
       {active ? (
@@ -301,6 +339,7 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
           onSend={sendMessage}
           onTyping={sendTyping}
           onBack={closeConversation}
+          onShowProfile={() => setProfileId(active.id)}
         />
       ) : (
         <section className="grid place-items-center bg-panel-2 p-8 text-center max-md:hidden">
@@ -318,6 +357,17 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
             </p>
           </div>
         </section>
+      )}
+      {profileId !== null && (
+        <ProfileDialog
+          key={profileId}
+          userId={profileId}
+          me={me}
+          isOnline={isOnline}
+          onClose={() => setProfileId(null)}
+          onProfileSaved={(profile) => onMeChange(publicUser(profile))}
+          onMessage={openConversation}
+        />
       )}
     </div>
   );

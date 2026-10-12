@@ -6,7 +6,7 @@ import type {
   UserWithPresence,
 } from "../../../shared/types";
 import { api } from "../api.ts";
-import { formatShort } from "../format.ts";
+import { formatShort, nameOf } from "../format.ts";
 import { cx, ui } from "../ui.ts";
 import Avatar from "./Avatar.tsx";
 
@@ -23,6 +23,8 @@ interface SidebarProps {
   isOnline: (user: { id: number; online?: boolean }) => boolean;
   connected: boolean;
   onSelect: (user: PublicUser) => void;
+  /** Opens your own profile (from your avatar/name in the header). */
+  onShowProfile: () => void;
   onLogout: () => void;
 }
 
@@ -73,7 +75,7 @@ function sortPeople(
       if (!b.lastAt) return -1;
       return b.lastAt.localeCompare(a.lastAt); // ISO timestamps sort as strings
     }
-    return a.username.localeCompare(b.username, undefined, {
+    return nameOf(a).localeCompare(nameOf(b), undefined, {
       sensitivity: "base",
     });
   });
@@ -89,6 +91,7 @@ export default function Sidebar({
   isOnline,
   connected,
   onSelect,
+  onShowProfile,
   onLogout,
 }: SidebarProps) {
   const [tab, setTab] = useState<Tab>("chats");
@@ -155,10 +158,14 @@ export default function Sidebar({
       )}
     >
       <header className={cx(ui.header, "justify-between")}>
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Avatar name={me.username} size={36} />
+        <button
+          className="-m-1.5 flex min-w-0 items-center gap-2.5 rounded-xl p-1.5 text-left hover:bg-panel-2"
+          onClick={onShowProfile}
+          aria-label="Your profile"
+        >
+          <Avatar name={nameOf(me)} src={me.avatarUrl} size={36} />
           <div className={ui.nameBlock}>
-            <strong>{me.username}</strong>
+            <strong className="truncate">{nameOf(me)}</strong>
             <span className={ui.status}>
               {connected && (
                 <span className="mr-1.5 inline-block size-1.75 rounded-full bg-online align-[1px]" />
@@ -166,7 +173,7 @@ export default function Sidebar({
               {connected ? "Online" : "Reconnecting…"}
             </span>
           </div>
-        </div>
+        </button>
         <button className={ui.btnGhost} onClick={onLogout}>
           Log out
         </button>
@@ -222,7 +229,11 @@ export default function Sidebar({
         {tab === "people" ? (
           <PeopleList
             people={sortPeople(
-              people.filter((p) => p.username.toLowerCase().includes(q)),
+              people.filter((p) =>
+                `${p.username} ${p.displayName ?? ""}`
+                  .toLowerCase()
+                  .includes(q),
+              ),
               isOnline,
             )}
             filtered={q.length > 0}
@@ -241,9 +252,13 @@ export default function Sidebar({
                   data-name={u.username}
                   onClick={() => pick(u)}
                 >
-                  <Avatar name={u.username} online={isOnline(u)} />
+                  <Avatar
+                    name={nameOf(u)}
+                    src={u.avatarUrl}
+                    online={isOnline(u)}
+                  />
                   <span className={row.text}>
-                    <span className={row.title}>{u.username}</span>
+                    <span className={row.title}>{nameOf(u)}</span>
                     <span className={row.sub(false)}>Start a conversation</span>
                   </span>
                 </button>
@@ -269,10 +284,14 @@ export default function Sidebar({
                     data-name={c.username}
                     onClick={() => onSelect(c)}
                   >
-                    <Avatar name={c.username} online={isOnline(c)} />
+                    <Avatar
+                      name={nameOf(c)}
+                      src={c.avatarUrl}
+                      online={isOnline(c)}
+                    />
                     <span className={row.text}>
                       <span className={row.line}>
-                        <span className={row.title}>{c.username}</span>
+                        <span className={row.title}>{nameOf(c)}</span>
                         <span className={row.time}>
                           {formatShort(c.lastAt)}
                         </span>
@@ -342,10 +361,10 @@ function PeopleList({
           data-name={p.username}
           onClick={() => onSelect(p)}
         >
-          <Avatar name={p.username} online={isOn} />
+          <Avatar name={nameOf(p)} src={p.avatarUrl} online={isOn} />
           <span className={row.text}>
             <span className={row.line}>
-              <span className={row.title}>{p.username}</span>
+              <span className={row.title}>{nameOf(p)}</span>
               {p.lastAt && (
                 <span className={row.time}>{formatShort(p.lastAt)}</span>
               )}

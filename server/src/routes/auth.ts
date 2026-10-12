@@ -7,7 +7,7 @@ import {
   requireAuth,
   setAuthCookie,
 } from "../auth.js";
-import type { Db } from "../db.js";
+import { toPublicUser, type Db } from "../db.js";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 
@@ -66,7 +66,7 @@ export function authRoutes(db: Db): Router {
       return;
     }
     setAuthCookie(res, user);
-    res.status(201).json({ user: { id: user.id, username: user.username } });
+    res.status(201).json({ user: toPublicUser(user) });
   });
 
   router.post("/login", async (req: Request, res: Response<AuthReply>) => {
@@ -87,7 +87,7 @@ export function authRoutes(db: Db): Router {
     }
 
     setAuthCookie(res, record);
-    res.json({ user: { id: record.id, username: record.username } });
+    res.json({ user: toPublicUser(record) });
   });
 
   router.post("/logout", (_req, res) => {

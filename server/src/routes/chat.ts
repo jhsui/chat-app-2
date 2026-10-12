@@ -6,13 +6,12 @@ import type {
   PeopleResponse,
   UsersResponse,
 } from "../../../shared/types.js";
-import { currentUser, requireAuth } from "../auth.js";
-import { isValidId, type Db } from "../db.js";
+import { currentUser } from "../auth.js";
+import { isValidId, toPublicUser, type Db } from "../db.js";
 import type { Presence } from "../presence.js";
 
 export function chatRoutes(db: Db, presence: Presence): Router {
   const router = Router();
-  router.use(requireAuth(db));
 
   // Find people to message: GET /api/users?q=ali
   router.get("/users", async (req: Request, res: Response<UsersResponse>) => {
@@ -73,11 +72,7 @@ export function chatRoutes(db: Db, presence: Presence): Router {
       });
 
       res.json({
-        user: {
-          id: other.id,
-          username: other.username,
-          online: presence.isOnline(other.id),
-        },
+        user: { ...toPublicUser(other), online: presence.isOnline(other.id) },
         messages,
         hasMore: messages.length === limit,
       });

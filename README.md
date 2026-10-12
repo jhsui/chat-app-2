@@ -8,7 +8,8 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 
 - Sign up / sign in with username and password (passwords hashed with bcrypt)
 - **Chats | People** tabs in the sidebar: People lists every user, online first, then by most recent chat
-- Search for people by username and start a conversation
+- **Profiles:** upload an avatar (cropped and resized in the browser, stored in Supabase Storage), set a display name and a short bio, and view other people's profiles. Changes show up live for everyone
+- Search for people by username or display name and start a conversation
 - Messages arrive instantly over WebSockets and are saved to PostgreSQL
 - Conversation list sorted by latest message, with unread badges
 - Online / offline status, typing indicator, and "Sent / Seen" read receipts
@@ -44,6 +45,33 @@ Both run exactly the same SQL (`server/src/db.ts`). Tables are created automatic
 - To start over with an empty local database, stop the app and delete `server/data/pglite`.
 - To browse the data, point any Postgres client (pgAdmin, TablePlus, `psql`) at your `DATABASE_URL`. PGlite's folder can only be opened by the app itself.
 - Tests use a throwaway in-memory PGlite by default. `TEST_DATABASE_URL=postgres://... npm test` runs them against a real server instead (**it wipes the `users` and `messages` tables in that database**).
+
+## Avatars (Supabase Storage)
+
+Profile pictures are stored in a [Supabase Storage](https://supabase.com/docs/guides/storage) bucket; the database only keeps each avatar's URL. Everything else works without it. Until it's configured, uploading a photo shows "Avatar uploads aren't set up on this server yet".
+
+One-time setup:
+
+1. Create a free project at [supabase.com](https://supabase.com).
+2. **Storage → New bucket** → name it `avatars` and turn on **Public bucket** (so the images can be shown in `<img>` tags). Optionally limit it to `image/*` and 1 MB.
+3. **Project Settings → API Keys** → copy the **secret** key (`sb_secret_…`; the older `service_role` key also works), and copy the project URL.
+4. Add them to `server/.env` (and later to Railway's variables):
+
+   ```bash
+   SUPABASE_URL=https://your-project-ref.supabase.co
+   SUPABASE_SECRET_KEY=sb_secret_...
+   # SUPABASE_BUCKET=avatars   # only if you named the bucket differently
+   ```
+
+5. Restart `npm run dev`.
+
+How it works:
+
+- The browser center-crops the chosen photo to a 256×256 WebP (~10–40 KB) before uploading, so big phone photos upload quickly.
+- The server checks the file's first bytes to confirm it's really a PNG/JPEG/WebP, uploads it with the secret key, saves the public URL, and deletes the previous avatar file.
+- Each upload gets a new file name, so browsers can cache avatars aggressively without showing an outdated picture.
+- The secret key stays on the server. **Never** put it in client code or commit `.env`.
+- Storage is behind a small `AvatarStorage` interface (`server/src/storage.ts`), so tests use an in-memory fake, and switching to S3/R2 would only need a new implementation.
 
 ## Scripts (run from the project root)
 
@@ -105,7 +133,9 @@ chat-app/
 │   │   ├── auth.ts          JWT cookie helpers + requireAuth middleware
 │   │   ├── socket.ts        real-time events
 │   │   ├── presence.ts      online tracking
-│   │   └── routes/          auth.ts (register/login/logout/me), chat.ts (users, conversations, messages)
+│   │   ├── storage.ts       Supabase Storage for avatars + image type check
+│   │   └── routes/          auth.ts (register/login/logout/me), chat.ts (users, conversations, messages),
+│   │                        profile.ts (view/edit profile, upload/remove avatar)
 │   ├── test/chat.test.ts    node:test suite (run with tsx)
 │   └── data/pglite/         local PGlite database (created on first run, git-ignored)
 └── client/
@@ -114,19 +144,30 @@ chat-app/
     └── src/
         ├── App.tsx          session check → AuthPage or ChatPage
         ├── api.ts           typed fetch wrapper
-        ├── components/      AuthPage, ChatPage (socket + state), Sidebar, ChatWindow, Avatar
+        ├── components/      AuthPage, ChatPage (socket + state), Sidebar, ChatWindow, ProfileDialog, Avatar
+        ├── image.ts         crops/resizes a photo into a 256×256 avatar before upload
         ├── ui.ts           shared Tailwind class strings + cx() helper
         └── styles.css      Tailwind entry: theme tokens (light/dark), keyframes
 ```
 
 ## Socket events
 
-| Client → server | Payload              | Server → client | Payload                          |
-| --------------- | -------------------- | --------------- | -------------------------------- |
-| `message:send`  | `{ to, body }` + ack | `message:new`   | `Message`                        |
-| `typing`        | `{ to, typing }`     | `typing`        | `{ from, typing }`               |
-| `messages:read` | `{ from }`           | `messages:read` | `{ readerId, senderId, upToId }` |
-|                 |                      | `presence`      | `{ userId, online }`             |
+| Client → server | Payload              | Server → client   | Payload                          |
+| --------------- | -------------------- | ----------------- | -------------------------------- |
+| `message:send`  | `{ to, body }` + ack | `message:new`     | `Message`                        |
+| `typing`        | `{ to, typing }`     | `typing`          | `{ from, typing }`               |
+| `messages:read` | `{ from }`           | `messages:read`   | `{ readerId, senderId, upToId }` |
+|                 |                      | `presence`        | `{ userId, online }`             |
+|                 |                      | `profile:updated` | `PublicUser` (new name/avatar)   |
+
+## Profile API
+
+| Method & path           | Body                   | Does                                          |
+| ----------------------- | ---------------------- | --------------------------------------------- |
+| `GET /api/users/:id`    |                        | Anyone's profile (name, bio, avatar, online)  |
+| `PATCH /api/me`         | `{ displayName, bio }` | Edit your display name (≤ 40) and bio (≤ 160) |
+| `PUT /api/me/avatar`    | image bytes (≤ 512 KB) | Upload a new avatar                           |
+| `DELETE /api/me/avatar` |                        | Remove your avatar                            |
 
 ## Ideas for next steps
 

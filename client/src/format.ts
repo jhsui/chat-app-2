@@ -1,3 +1,11 @@
+/** The name to show for someone: their display name if set, else the username. */
+export function nameOf(user: {
+  username: string;
+  displayName: string | null;
+}): string {
+  return user.displayName || user.username;
+}
+
 const sameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() &&
   a.getMonth() === b.getMonth() &&

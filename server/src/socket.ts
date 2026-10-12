@@ -7,7 +7,7 @@ import type {
   ServerToClientEvents,
 } from "../../shared/types.js";
 import { COOKIE_NAME, verifyToken } from "./auth.js";
-import { isValidId, type Db } from "./db.js";
+import { isValidId, toPublicUser, type Db } from "./db.js";
 import type { Presence } from "./presence.js";
 
 const MAX_MESSAGE_LENGTH = 2000;
@@ -46,7 +46,7 @@ export function attachSocket(
       const userId = verifyToken(cookies[COOKIE_NAME]);
       const user = userId === null ? undefined : await db.findUserById(userId);
       if (!user) return next(new Error("unauthorized"));
-      socket.data.user = { id: user.id, username: user.username };
+      socket.data.user = toPublicUser(user);
       next();
     } catch (err) {
       console.error(err);

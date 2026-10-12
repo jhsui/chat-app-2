@@ -3,6 +3,7 @@ import type {
   ConversationsResponse,
   MessagesResponse,
   PeopleResponse,
+  ProfileResponse,
   UsersResponse,
 } from "../../shared/types";
 
@@ -25,6 +26,11 @@ async function request<T>(
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  return parse<T>(res);
+}
+
+/** Reads a JSON response, turning error statuses into an ApiError. */
+async function parse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new ApiError(
@@ -56,6 +62,21 @@ export const api = {
     request<MessagesResponse>(
       `/messages/${userId}${before ? `?before=${before}` : ""}`,
     ),
+  profile: (userId: number) => request<ProfileResponse>(`/users/${userId}`),
+  updateProfile: (fields: { displayName: string; bio: string }) =>
+    request<ProfileResponse>("/me", { method: "PATCH", body: fields }),
+  /** Uploads image bytes as-is (already resized by toSquareAvatar). */
+  uploadAvatar: async (image: Blob) =>
+    parse<ProfileResponse>(
+      await fetch("/api/me/avatar", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": image.type },
+        body: image,
+      }),
+    ),
+  removeAvatar: () =>
+    request<ProfileResponse>("/me/avatar", { method: "DELETE" }),
 };
 
 /** Turns anything thrown into a readable message. */

@@ -25,5 +25,12 @@ export default function App() {
       <div className="grid h-full place-items-center text-muted">Loading…</div>
     );
   if (!user) return <AuthPage onAuthenticated={setUser} />;
-  return <ChatPage key={user.id} me={user} onLogout={handleLogout} />;
+  return (
+    <ChatPage
+      key={user.id}
+      me={user}
+      onMeChange={setUser}
+      onLogout={handleLogout}
+    />
+  );
 }

@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import type { RequestHandler, Response } from "express";
 import type { PublicUser } from "../../shared/types.js";
-import type { Db } from "./db.js";
+import { toPublicUser, type Db } from "./db.js";
 
 // Tell TypeScript that `req.user` exists once requireAuth has run.
 declare global {
@@ -69,7 +69,7 @@ export function requireAuth(db: Db): RequestHandler {
       res.status(401).json({ error: "Not signed in" });
       return;
     }
-    req.user = { id: user.id, username: user.username };
+    req.user = toPublicUser(user);
     next();
   };
 }

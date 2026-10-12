@@ -9,7 +9,13 @@ import {
 } from "react";
 import type { Message, PublicUser } from "../../../shared/types";
 import { errorMessage } from "../api.ts";
-import { formatDay, formatTime, isSameDay, msBetween } from "../format.ts";
+import {
+  formatDay,
+  formatTime,
+  isSameDay,
+  msBetween,
+  nameOf,
+} from "../format.ts";
 import { cx, ui } from "../ui.ts";
 import Avatar from "./Avatar.tsx";
 
@@ -28,6 +34,8 @@ interface ChatWindowProps {
   onSend: (body: string) => Promise<void>;
   onTyping: (typing: boolean) => void;
   onBack: () => void;
+  /** Opens this person's profile. */
+  onShowProfile: () => void;
 }
 
 interface ScrollState {
@@ -49,6 +57,7 @@ export default function ChatWindow({
   onSend,
   onTyping,
   onBack,
+  onShowProfile,
 }: ChatWindowProps) {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
@@ -164,13 +173,24 @@ export default function ChatWindow({
         >
           ←
         </button>
-        <Avatar name={user.username} online={online} size={38} />
-        <div className={ui.nameBlock}>
-          <strong>{user.username}</strong>
-          <span className={ui.status}>
-            {typing ? "typing…" : online ? "Online" : "Offline"}
-          </span>
-        </div>
+        <button
+          className="-m-1.5 flex min-w-0 items-center gap-3 rounded-xl p-1.5 text-left hover:bg-panel-2"
+          onClick={onShowProfile}
+          aria-label={`View ${nameOf(user)}'s profile`}
+        >
+          <Avatar
+            name={nameOf(user)}
+            src={user.avatarUrl}
+            online={online}
+            size={38}
+          />
+          <div className={ui.nameBlock}>
+            <strong className="truncate">{nameOf(user)}</strong>
+            <span className={ui.status}>
+              {typing ? "typing…" : online ? "Online" : "Offline"}
+            </span>
+          </div>
+        </button>
       </header>
 
       {/* The first child's auto top margin keeps short conversations pinned to the bottom. */}
@@ -191,7 +211,7 @@ export default function ChatWindow({
         {!loading && messages.length === 0 && (
           <p className="px-4 py-8 text-center text-muted">
             This is the start of your conversation with{" "}
-            <strong>{user.username}</strong>. Say hi!
+            <strong>{nameOf(user)}</strong>. Say hi!
           </p>
         )}
 
@@ -254,7 +274,7 @@ export default function ChatWindow({
           <div className="mt-2.5 flex self-start">
             <div
               className="flex gap-1 rounded-[18px] rounded-bl-md bg-bubble px-3.5 py-3"
-              aria-label={`${user.username} is typing`}
+              aria-label={`${nameOf(user)} is typing`}
             >
               {["0s", "0.15s", "0.3s"].map((delay) => (
                 <span
@@ -284,9 +304,9 @@ export default function ChatWindow({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onBlur={stopTyping}
-          placeholder={`Message ${user.username}`}
+          placeholder={`Message ${nameOf(user)}`}
           maxLength={2000}
-          aria-label={`Message ${user.username}`}
+          aria-label={`Message ${nameOf(user)}`}
           className={cx(
             ui.fieldBase,
             "field-sizing-content max-h-40 min-h-10.5 flex-1 resize-none rounded-[21px] px-4 py-2",

@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { cx } from "../ui.ts";
 
 function hue(name: string): number {
@@ -9,18 +9,26 @@ function hue(name: string): number {
 
 interface AvatarProps {
   name: string;
+  /** Profile picture URL. Without one (or if it fails to load) the initial is shown. */
+  src?: string | null;
   /** Pass a boolean to show a presence dot; leave undefined to hide it. */
   online?: boolean;
   size?: number;
 }
 
-export default function Avatar({ name, online, size = 40 }: AvatarProps) {
+export default function Avatar({ name, src, online, size = 40 }: AvatarProps) {
+  // Remember which URL failed, so a new avatar gets a fresh chance to load.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const showImage = Boolean(src) && src !== failedSrc;
+
   // Each name gets its own hue; the light/dark shades are picked in the classes below.
   const style = {
     width: size,
     height: size,
+    fontSize: size >= 64 ? Math.round(size * 0.4) : undefined,
     "--hue": hue(name),
   } as CSSProperties;
+
   return (
     <span
       className={cx(
@@ -31,7 +39,16 @@ export default function Avatar({ name, online, size = 40 }: AvatarProps) {
       style={style}
       aria-hidden="true"
     >
-      {name.charAt(0).toUpperCase()}
+      {showImage ? (
+        <img
+          src={src!}
+          alt=""
+          className="size-full rounded-full object-cover"
+          onError={() => setFailedSrc(src!)}
+        />
+      ) : (
+        name.charAt(0).toUpperCase()
+      )}
       {online !== undefined && (
         <span
           className={cx(

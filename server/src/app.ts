@@ -3,14 +3,19 @@ import cookieParser from "cookie-parser";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+import { requireAuth } from "./auth.js";
 import { openDb, type Db, type DbConfig } from "./db.js";
 import { createPresence } from "./presence.js";
 import { attachSocket, type ChatServer } from "./socket.js";
 import { authRoutes } from "./routes/auth.js";
 import { chatRoutes } from "./routes/chat.js";
+import { MAX_AVATAR_BYTES, profileRoutes } from "./routes/profile.js";
+import { storageFromEnv, type AvatarStorage } from "./storage.js";
 
 export interface ServerOptions {
   db: DbConfig;
+  /** Where avatars go. Defaults to Supabase from env vars (null if not configured). */
+  avatarStorage?: AvatarStorage | null;
   clientDist?: string;
   corsOrigin?: string;
 }
@@ -29,12 +34,15 @@ export interface ChatApp {
  */
 export async function createServer({
   db: dbConfig,
+  avatarStorage = storageFromEnv(),
   clientDist,
   corsOrigin,
 }: ServerOptions): Promise<ChatApp> {
   const db = await openDb(dbConfig);
   const presence = createPresence();
   const app = express();
+  const httpServer = http.createServer(app);
+  const io = attachSocket(httpServer, db, presence, { corsOrigin });
 
   app.disable("x-powered-by");
   app.use(express.json({ limit: "10kb" }));
@@ -44,7 +52,15 @@ export async function createServer({
     res.json({ ok: true });
   });
   app.use("/api/auth", authRoutes(db));
-  app.use("/api", chatRoutes(db, presence));
+  // Everything else under /api needs a signed-in user.
+  app.use(
+    "/api",
+    requireAuth(db),
+    chatRoutes(db, presence),
+    profileRoutes(db, presence, avatarStorage, (user) =>
+      io.emit("profile:updated", user),
+    ),
+  );
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "Not found" });
   });
@@ -63,13 +79,16 @@ export async function createServer({
       res.status(400).json({ error: "Invalid JSON" });
       return;
     }
+    if (err?.type === "entity.too.large") {
+      res.status(413).json({
+        error: `That's too large (max ${Math.round((err.limit ?? MAX_AVATAR_BYTES) / 1024)} KB)`,
+      });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "Something went wrong" });
   };
   app.use(errorHandler);
-
-  const httpServer = http.createServer(app);
-  const io = attachSocket(httpServer, db, presence, { corsOrigin });
 
   return {
     app,

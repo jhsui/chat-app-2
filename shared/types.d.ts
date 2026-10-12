@@ -5,7 +5,12 @@
 
 export interface PublicUser {
   id: number;
+  /** Unique, used to sign in and to search. */
   username: string;
+  /** Optional name shown instead of the username. */
+  displayName: string | null;
+  /** Public URL of the profile picture, or null to show the initial instead. */
+  avatarUrl: string | null;
 }
 
 export interface UserWithPresence extends PublicUser {
@@ -21,6 +26,14 @@ export interface Message {
   createdAt: string;
   /** ISO 8601 timestamp, or null while unread */
   readAt: string | null;
+}
+
+/** Everything shown on a profile page. */
+export interface Profile extends UserWithPresence {
+  /** Short "about me", up to 160 characters. */
+  bio: string | null;
+  /** ISO timestamp of when the account was created. */
+  createdAt: string;
 }
 
 /** An entry in the "People" tab: any other user, with when you last chatted. */
@@ -40,6 +53,10 @@ export interface Conversation extends UserWithPresence {
 
 export interface AuthResponse {
   user: PublicUser;
+}
+
+export interface ProfileResponse {
+  profile: Profile;
 }
 
 export interface UsersResponse {
@@ -87,4 +104,6 @@ export interface ServerToClientEvents {
     upToId: number;
   }) => void;
   presence: (payload: { userId: number; online: boolean }) => void;
+  /** Someone changed their display name or avatar. */
+  "profile:updated": (user: PublicUser) => void;
 }
