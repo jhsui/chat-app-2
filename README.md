@@ -14,6 +14,7 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 - **Images:** attach a picture with the image button or paste one from the clipboard; it's shrunk in the browser, stored in a private Supabase Storage bucket that only the two people in the conversation can load from, and opens full-size when clicked
 - Conversation list sorted by latest message, with unread badges
 - Online / offline status, typing indicator, and "Sent / Seen" read receipts
+- Emoji picker in the message box, with search, categories and skin tones ([emoji-picker-react](https://github.com/ealush/emoji-picker-react), downloaded the first time it's opened)
 - Per-chat drafts: unsent text stays with its chat when you switch, with a "Draft: …" preview in the sidebar (kept until you reload)
 - Message history with "load older" pagination
 - Works across multiple tabs, reconnects automatically, light/dark mode, mobile layout
@@ -158,7 +159,7 @@ chat-app/
     └── src/
         ├── App.tsx          session check → AuthPage or ChatPage
         ├── api.ts           typed fetch wrapper
-        ├── components/      AuthPage, ChatPage (socket + state), Sidebar, ChatWindow, ImageViewer, ProfileDialog, Avatar
+        ├── components/      AuthPage, ChatPage (socket + state), Sidebar, ChatWindow, EmojiPicker, ImageViewer, ProfileDialog, Avatar
         ├── image.ts         resizes photos in the browser before upload (avatars and chat images)
         ├── ui.ts           shared Tailwind class strings + cx() helper
         └── styles.css      Tailwind entry: theme tokens (light/dark), keyframes

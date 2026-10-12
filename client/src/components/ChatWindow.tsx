@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -21,6 +23,11 @@ import { toChatImage, type ChatImage } from "../image.ts";
 import { cx, ui } from "../ui.ts";
 import Avatar from "./Avatar.tsx";
 import ImageViewer from "./ImageViewer.tsx";
+
+// Downloaded the first time the picker is opened, not with the rest of the app.
+const EmojiPicker = lazy(() => import("./EmojiPicker.tsx"));
+
+const MAX_MESSAGE_LENGTH = 2000;
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 /** Size of the avatar beside each run of messages, in pixels. */
@@ -145,6 +152,10 @@ export default function ChatWindow({
   } | null>(null);
   const [sendingImage, setSendingImage] = useState(false);
   const [viewing, setViewing] = useState<MessageImage | null>(null); // picture opened large
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const composerRef = useRef<HTMLDivElement>(null);
+  // Where to put the cursor once an inserted emoji is in the text box.
+  const caretRef = useRef<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -226,9 +237,8 @@ export default function ChatWindow({
     }
   }
 
-  function handleChange(e: ChangeEvent<HTMLTextAreaElement>) {
-    updateDraft(e.target.value);
-    setError("");
+  /** Tells the other person we're typing, until 2 seconds pass without a change. */
+  function noteTyping() {
     const t = typingState.current;
     if (!t.active) {
       t.active = true;
@@ -237,6 +247,53 @@ export default function ChatWindow({
     clearTimeout(t.timer);
     t.timer = setTimeout(stopTyping, 2000);
   }
+
+  function handleChange(e: ChangeEvent<HTMLTextAreaElement>) {
+    updateDraft(e.target.value);
+    setError("");
+    noteTyping();
+  }
+
+  /** Puts an emoji where the cursor is in the text box, replacing any selected text. */
+  function insertEmoji(emoji: string) {
+    const input = inputRef.current;
+    const text = draftRef.current;
+    // The text box remembers its cursor even while the picker has the focus.
+    const start = input?.selectionStart ?? text.length;
+    const end = input?.selectionEnd ?? text.length;
+    if (text.length - (end - start) + emoji.length > MAX_MESSAGE_LENGTH) return;
+    updateDraft(text.slice(0, start) + emoji + text.slice(end));
+    caretRef.current = start + emoji.length;
+    setError("");
+    noteTyping();
+  }
+
+  // Changing the text from code sends the cursor to the end, so after an emoji
+  // is inserted put it back right behind the emoji.
+  useLayoutEffect(() => {
+    if (caretRef.current === null) return;
+    inputRef.current?.setSelectionRange(caretRef.current, caretRef.current);
+    caretRef.current = null;
+  }, [draft]);
+
+  // Close the emoji picker with Esc, or by clicking anywhere outside the message box.
+  useEffect(() => {
+    if (!emojiOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      if (!composerRef.current?.contains(e.target as Node)) setEmojiOpen(false);
+    }
+    function onKeyDown(e: globalThis.KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      setEmojiOpen(false);
+      inputRef.current?.focus();
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [emojiOpen]);
 
   /** Attaches a picked or pasted picture; it's sent with the Send button. */
   async function attach(file: File) {
@@ -273,6 +330,7 @@ export default function ChatWindow({
     // Clear right away so fast typers can keep going; put the text back if it fails.
     updateDraft("");
     stopTyping();
+    setEmojiOpen(false);
     inputRef.current?.focus();
     try {
       // A picture and text go out as two messages, picture first.
@@ -453,95 +511,137 @@ export default function ChatWindow({
         )}
       </div>
 
-      <form
-        className="flex flex-wrap items-end gap-2.5 border-t border-line bg-panel px-4 py-3"
-        onSubmit={handleSubmit}
-      >
-        {error && (
-          <p className={cx(ui.error, "basis-full")} role="alert">
-            {error}
-          </p>
-        )}
-        {attachment && (
-          <div className="basis-full">
-            <div className="relative inline-block">
-              <img
-                src={attachment.previewUrl}
-                alt="Image to send"
-                className="block h-20 max-w-40 rounded-xl border border-line object-cover"
-              />
-              {sendingImage ? (
-                <span className="absolute inset-0 grid place-items-center rounded-xl bg-black/50 text-xs font-semibold text-white">
-                  Sending…
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  className="absolute -top-2 -right-2 grid size-6 place-items-center rounded-full border border-line bg-panel leading-none text-muted hover:text-fg"
-                  onClick={() => setAttachment(null)}
-                  aria-label="Remove image"
-                >
-                  ×
-                </button>
-              )}
-            </div>
+      {/* The picker sits outside the <form>, so Enter in its search box doesn't send the message. */}
+      <div ref={composerRef} className="relative">
+        {emojiOpen && (
+          <div className="absolute bottom-full left-3 z-10 mb-2 w-[min(350px,calc(100%-1.5rem))] rounded-2xl shadow-[0_10px_40px_rgb(0_0_0/0.18)]">
+            <Suspense
+              fallback={
+                <div className="grid h-[380px] place-items-center rounded-2xl border border-line bg-panel text-muted">
+                  Loading…
+                </div>
+              }
+            >
+              <EmojiPicker onPick={insertEmoji} />
+            </Suspense>
           </div>
         )}
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFile}
-          aria-label="Choose an image to send"
-        />
-        <button
-          type="button"
-          className="grid size-10.5 flex-none place-items-center rounded-full text-muted hover:enabled:bg-panel-2 hover:enabled:text-fg disabled:opacity-50"
-          onClick={() => fileRef.current?.click()}
-          disabled={sendingImage}
-          aria-label="Attach an image"
-          title="Attach an image"
+        <form
+          className="flex flex-wrap items-end gap-2.5 border-t border-line bg-panel px-4 py-3"
+          onSubmit={handleSubmit}
         >
-          <svg
-            viewBox="0 0 24 24"
-            className="size-5.5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <rect x="3" y="4" width="18" height="16" rx="3" />
-            <circle cx="8.5" cy="9.5" r="1.5" />
-            <path d="m21 15-4.5-4.5L7 20" />
-          </svg>
-        </button>
-        <textarea
-          ref={inputRef}
-          rows={1}
-          value={draft}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          onBlur={stopTyping}
-          placeholder={`Message ${nameOf(user)}`}
-          maxLength={2000}
-          aria-label={`Message ${nameOf(user)}`}
-          className={cx(
-            ui.fieldBase,
-            "field-sizing-content max-h-40 min-h-10.5 flex-1 resize-none rounded-[21px] px-4 py-2",
+          {error && (
+            <p className={cx(ui.error, "basis-full")} role="alert">
+              {error}
+            </p>
           )}
-        />
-        <button
-          className={cx(ui.primaryBase, "h-10.5 rounded-[21px] px-4")}
-          type="submit"
-          disabled={(!draft.trim() && !attachment) || sendingImage}
-        >
-          Send
-        </button>
-      </form>
+          {attachment && (
+            <div className="basis-full">
+              <div className="relative inline-block">
+                <img
+                  src={attachment.previewUrl}
+                  alt="Image to send"
+                  className="block h-20 max-w-40 rounded-xl border border-line object-cover"
+                />
+                {sendingImage ? (
+                  <span className="absolute inset-0 grid place-items-center rounded-xl bg-black/50 text-xs font-semibold text-white">
+                    Sending…
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="absolute -top-2 -right-2 grid size-6 place-items-center rounded-full border border-line bg-panel leading-none text-muted hover:text-fg"
+                    onClick={() => setAttachment(null)}
+                    aria-label="Remove image"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFile}
+            aria-label="Choose an image to send"
+          />
+          <button
+            type="button"
+            className="grid size-10.5 flex-none place-items-center rounded-full text-muted hover:enabled:bg-panel-2 hover:enabled:text-fg disabled:opacity-50"
+            onClick={() => fileRef.current?.click()}
+            disabled={sendingImage}
+            aria-label="Attach an image"
+            title="Attach an image"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="size-5.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="4" width="18" height="16" rx="3" />
+              <circle cx="8.5" cy="9.5" r="1.5" />
+              <path d="m21 15-4.5-4.5L7 20" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={cx(
+              "grid size-10.5 flex-none place-items-center rounded-full hover:bg-panel-2 hover:text-fg",
+              emojiOpen ? "bg-panel-2 text-fg" : "text-muted",
+            )}
+            onClick={() => setEmojiOpen((open) => !open)}
+            aria-label="Emoji"
+            aria-expanded={emojiOpen}
+            title="Emoji"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="size-5.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" />
+              <path d="M9 9.75h.01M15 9.75h.01" strokeWidth="2.6" />
+            </svg>
+          </button>
+          <textarea
+            ref={inputRef}
+            rows={1}
+            value={draft}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onBlur={stopTyping}
+            placeholder={`Message ${nameOf(user)}`}
+            maxLength={MAX_MESSAGE_LENGTH}
+            aria-label={`Message ${nameOf(user)}`}
+            className={cx(
+              ui.fieldBase,
+              "field-sizing-content max-h-40 min-h-10.5 flex-1 resize-none rounded-[21px] px-4 py-2",
+            )}
+          />
+          <button
+            className={cx(ui.primaryBase, "h-10.5 rounded-[21px] px-4")}
+            type="submit"
+            disabled={(!draft.trim() && !attachment) || sendingImage}
+          >
+            Send
+          </button>
+        </form>
+      </div>
       {viewing && (
         <ImageViewer image={viewing} onClose={() => setViewing(null)} />
       )}
