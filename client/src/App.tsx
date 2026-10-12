@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { api } from './api.js';
-import AuthPage from './components/AuthPage.jsx';
-import ChatPage from './components/ChatPage.jsx';
+import type { PublicUser } from '../../shared/types';
+import { api } from './api.ts';
+import AuthPage from './components/AuthPage.tsx';
+import ChatPage from './components/ChatPage.tsx';
 
 export default function App() {
   // undefined = still checking the session, null = signed out
-  const [user, setUser] = useState(undefined);
+  const [user, setUser] = useState<PublicUser | null | undefined>(undefined);
 
   useEffect(() => {
     api

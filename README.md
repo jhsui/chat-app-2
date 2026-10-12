@@ -2,11 +2,12 @@
 
 A real-time chat web app with user accounts and private 1:1 direct messages.
 
-**Stack:** React 19 + Vite · Node.js + Express 5 · Socket.IO · SQLite (better-sqlite3) · bcrypt + JWT (httpOnly cookie)
+**Stack:** TypeScript everywhere · React 19 + Vite · Node.js + Express 5 · Socket.IO · SQLite (better-sqlite3) · bcrypt + JWT (httpOnly cookie)
 
 ## Features
 
 - Sign up / sign in with username and password (passwords hashed with bcrypt)
+- **Chats | People** tabs in the sidebar: People lists every user, online first, then by most recent chat
 - Search for people by username and start a conversation
 - Messages arrive instantly over WebSockets and are saved to SQLite
 - Conversation list sorted by latest message, with unread badges
@@ -30,14 +31,23 @@ Optional: copy `server/.env.example` to `server/.env` to set your own `JWT_SECRE
 
 ## Scripts (run from the project root)
 
-| Command         | What it does                                                    |
-| --------------- | --------------------------------------------------------------- |
-| `npm run dev`   | Server (auto-restarts on change) + Vite dev server together     |
-| `npm test`      | Server tests: auth, search, live messaging, read receipts, paging |
-| `npm run build` | Builds the React app into `client/dist`                         |
-| `npm start`     | Runs the server; if `client/dist` exists it serves the app too  |
+| Command             | What it does                                                          |
+| ------------------- | --------------------------------------------------------------------- |
+| `npm run dev`       | Server (runs the `.ts` files directly with tsx, restarts on change) + Vite dev server |
+| `npm run typecheck` | Type-checks the server, tests and client with `tsc`                   |
+| `npm test`          | Server tests: auth, search, live messaging, read receipts, paging     |
+| `npm run build`     | Type-checks and builds the client into `client/dist`, compiles the server into `server/dist` |
+| `npm start`         | Runs the compiled server (`server/dist`); serves `client/dist` too    |
 
 To run it like production on one port: `npm run build && JWT_SECRET=something-long npm start`, then open http://localhost:3001.
+
+## TypeScript setup
+
+- **Shared types** live in `shared/types.d.ts`: the data shapes (`Message`, `Conversation`, …), every REST response, and the Socket.IO events. Both sides `import type` from it, so if you change an event's payload, `npm run typecheck` shows every place on the server *and* client that needs updating.
+- **Typed sockets:** the server is a `Server<ClientToServerEvents, ServerToClientEvents>` and the client a `Socket<ServerToClientEvents, ClientToServerEvents>`, so `socket.emit('message:send', …)` and every `socket.on(...)` handler are checked.
+- **Server:** in development `tsx` runs the `.ts` files directly (no build step). For production, `tsc` compiles `server/src` to `server/dist`. `tsconfig.json` covers src + tests for type-checking; `tsconfig.build.json` is the compile config.
+- **Client:** Vite compiles the `.tsx` files; `tsc --noEmit` only type-checks (run as part of `npm run build`).
+- Both configs use `strict` mode plus `noUncheckedIndexedAccess`, so array lookups like `messages[0]` are typed as possibly `undefined`.
 
 ## How it works
 
@@ -58,24 +68,29 @@ send message      ── socket ─────▶  validate, save, emit to both
 
 ```
 chat-app/
-├── package.json            root: workspaces + "dev" script
+├── package.json             root: workspaces + scripts
+├── shared/
+│   └── types.d.ts           types shared by server and client (data, API, socket events)
 ├── server/
+│   ├── tsconfig.json        type-check config (src + test)
+│   ├── tsconfig.build.json  compile config (src → dist)
 │   ├── src/
-│   │   ├── index.js        starts the server (loads .env)
-│   │   ├── app.js          builds Express + Socket.IO (used by tests too)
-│   │   ├── db.js           SQLite schema and queries
-│   │   ├── auth.js         JWT cookie helpers + requireAuth middleware
-│   │   ├── socket.js       real-time events
-│   │   ├── presence.js     online tracking
-│   │   └── routes/         auth.js (register/login/logout/me), chat.js (users, conversations, messages)
-│   ├── test/chat.test.js   node:test suite
-│   └── data/               SQLite database (created on first run, git-ignored)
+│   │   ├── index.ts         starts the server (loads .env)
+│   │   ├── app.ts           builds Express + Socket.IO (used by tests too)
+│   │   ├── db.ts            SQLite schema and typed queries
+│   │   ├── auth.ts          JWT cookie helpers + requireAuth middleware
+│   │   ├── socket.ts        real-time events
+│   │   ├── presence.ts      online tracking
+│   │   └── routes/          auth.ts (register/login/logout/me), chat.ts (users, conversations, messages)
+│   ├── test/chat.test.ts    node:test suite (run with tsx)
+│   └── data/                SQLite database (created on first run, git-ignored)
 └── client/
-    ├── vite.config.js      proxies /api and /socket.io to :3001 in dev
+    ├── tsconfig.json
+    ├── vite.config.ts       proxies /api and /socket.io to :3001 in dev
     └── src/
-        ├── App.jsx         session check → AuthPage or ChatPage
-        ├── api.js          fetch wrapper
-        ├── components/     AuthPage, ChatPage (socket + state), Sidebar, ChatWindow, Avatar
+        ├── App.tsx          session check → AuthPage or ChatPage
+        ├── api.ts           typed fetch wrapper
+        ├── components/      AuthPage, ChatPage (socket + state), Sidebar, ChatWindow, Avatar
         └── styles.css
 ```
 
@@ -83,7 +98,7 @@ chat-app/
 
 | Client → server  | Payload          | Server → client  | Payload                              |
 | ---------------- | ---------------- | ---------------- | ------------------------------------ |
-| `message:send`   | `{ to, body }` + ack | `message:new`  | message row                          |
+| `message:send`   | `{ to, body }` + ack | `message:new`  | `Message`                            |
 | `typing`         | `{ to, typing }` | `typing`         | `{ from, typing }`                   |
 | `messages:read`  | `{ from }`       | `messages:read`  | `{ readerId, senderId, upToId }`     |
 |                  |                  | `presence`       | `{ userId, online }`                 |

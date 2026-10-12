@@ -1,29 +1,49 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { io } from 'socket.io-client';
-import { api } from '../api.js';
-import Sidebar from './Sidebar.jsx';
-import ChatWindow from './ChatWindow.jsx';
+import { io, type Socket } from 'socket.io-client';
+import type {
+  ClientToServerEvents,
+  Conversation,
+  Message,
+  Person,
+  PublicUser,
+  ServerToClientEvents,
+} from '../../../shared/types';
+import { ApiError, api } from '../api.ts';
+import Sidebar from './Sidebar.tsx';
+import ChatWindow from './ChatWindow.tsx';
 
-export default function ChatPage({ me, onLogout }) {
-  const [conversations, setConversations] = useState([]);
-  const [active, setActive] = useState(null); // { id, username } of the person we're chatting with
-  const [messages, setMessages] = useState([]);
+type ChatSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+
+interface ChatPageProps {
+  me: PublicUser;
+  onLogout: () => void;
+}
+
+export default function ChatPage({ me, onLogout }: ChatPageProps) {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [people, setPeople] = useState<Person[]>([]); // everyone, for the People tab
+  const [active, setActive] = useState<PublicUser | null>(null); // the person we're chatting with
+  const [messages, setMessages] = useState<Message[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [online, setOnline] = useState({}); // live presence updates: userId -> boolean
-  const [typing, setTyping] = useState({}); // userId -> boolean
+  const [online, setOnline] = useState<Record<number, boolean>>({}); // live presence updates
+  const [typing, setTyping] = useState<Record<number, boolean>>({});
   const [connected, setConnected] = useState(true);
 
   // Socket handlers are registered once, so they read current values through refs.
-  const socketRef = useRef(null);
-  const activeRef = useRef(null);
-  const conversationsRef = useRef([]);
-  const typingTimers = useRef({});
+  const socketRef = useRef<ChatSocket | null>(null);
+  const activeRef = useRef<PublicUser | null>(null);
+  const conversationsRef = useRef<Conversation[]>([]);
+  const peopleRef = useRef<Person[]>([]);
+  const typingTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const onLogoutRef = useRef(onLogout);
 
   useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
+  useEffect(() => {
+    peopleRef.current = people;
+  }, [people]);
   useEffect(() => {
     onLogoutRef.current = onLogout;
   }, [onLogout]);
@@ -33,17 +53,26 @@ export default function ChatPage({ me, onLogout }) {
       const { conversations } = await api.conversations();
       setConversations(conversations);
     } catch (err) {
-      if (err.status === 401) onLogoutRef.current();
+      if (err instanceof ApiError && err.status === 401) onLogoutRef.current();
     }
   }, []);
 
-  const markRead = useCallback((userId) => {
+  const refreshPeople = useCallback(async () => {
+    try {
+      const { people } = await api.people();
+      setPeople(people);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) onLogoutRef.current();
+    }
+  }, []);
+
+  const markRead = useCallback((userId: number) => {
     socketRef.current?.emit('messages:read', { from: userId });
     setConversations((prev) => prev.map((c) => (c.id === userId ? { ...c, unread: 0 } : c)));
   }, []);
 
   const loadMessages = useCallback(
-    async (user) => {
+    async (user: PublicUser) => {
       setLoading(true);
       try {
         const data = await api.messages(user.id);
@@ -61,7 +90,7 @@ export default function ChatPage({ me, onLogout }) {
 
   // --- Real-time connection -------------------------------------------------
   useEffect(() => {
-    const socket = io({ withCredentials: true });
+    const socket: ChatSocket = io({ withCredentials: true });
     socketRef.current = socket;
 
     socket.on('connect', () => setConnected(true));
@@ -73,8 +102,9 @@ export default function ChatPage({ me, onLogout }) {
 
     // After a dropped connection, re-fetch anything we may have missed.
     socket.io.on('reconnect', () => {
-      refreshConversations();
-      if (activeRef.current) loadMessages(activeRef.current);
+      void refreshConversations();
+      void refreshPeople();
+      if (activeRef.current) void loadMessages(activeRef.current);
     });
 
     socket.on('message:new', (msg) => {
@@ -87,15 +117,16 @@ export default function ChatPage({ me, onLogout }) {
         if (incoming && document.visibilityState === 'visible') socket.emit('messages:read', { from: otherId });
       }
       if (incoming) setTyping((t) => ({ ...t, [otherId]: false }));
+      setPeople((prev) => prev.map((p) => (p.id === otherId ? { ...p, lastAt: msg.createdAt } : p)));
 
       if (!conversationsRef.current.some((c) => c.id === otherId)) {
-        refreshConversations(); // first message with someone new
+        void refreshConversations(); // first message with someone new
         return;
       }
       setConversations((prev) => {
         const current = prev.find((c) => c.id === otherId);
         if (!current) return prev;
-        const updated = {
+        const updated: Conversation = {
           ...current,
           lastBody: msg.body,
           lastSenderId: msg.senderId,
@@ -123,6 +154,8 @@ export default function ChatPage({ me, onLogout }) {
     socket.on('presence', ({ userId, online }) => {
       setOnline((o) => ({ ...o, [userId]: online }));
       if (!online) setTyping((t) => ({ ...t, [userId]: false }));
+      // Someone we don't know yet (e.g. they just signed up): reload the People list.
+      if (online && !peopleRef.current.some((p) => p.id === userId)) void refreshPeople();
     });
 
     socket.on('typing', ({ from, typing }) => {
@@ -134,14 +167,15 @@ export default function ChatPage({ me, onLogout }) {
       }
     });
 
-    refreshConversations();
+    void refreshConversations();
+    void refreshPeople();
 
     const timers = typingTimers.current;
     return () => {
       socket.disconnect();
       Object.values(timers).forEach(clearTimeout);
     };
-  }, [me.id, refreshConversations, loadMessages]);
+  }, [me.id, refreshConversations, refreshPeople, loadMessages]);
 
   // Mark messages read when the user comes back to the tab.
   useEffect(() => {
@@ -153,14 +187,14 @@ export default function ChatPage({ me, onLogout }) {
   }, [markRead]);
 
   // --- Actions ----------------------------------------------------------------
-  function openConversation(user) {
+  function openConversation(user: PublicUser) {
     if (activeRef.current?.id === user.id) return;
     const next = { id: user.id, username: user.username };
     activeRef.current = next;
     setActive(next);
     setMessages([]);
     setHasMore(false);
-    loadMessages(next);
+    void loadMessages(next);
   }
 
   function closeConversation() {
@@ -169,11 +203,12 @@ export default function ChatPage({ me, onLogout }) {
   }
 
   async function loadOlder() {
-    if (!active || !messages.length || loading) return;
+    const oldest = messages[0];
+    if (!active || !oldest || loading) return;
     const userId = active.id;
     setLoading(true);
     try {
-      const data = await api.messages(userId, messages[0].id);
+      const data = await api.messages(userId, oldest.id);
       if (activeRef.current?.id !== userId) return;
       setMessages((prev) => [...data.messages, ...prev]);
       setHasMore(data.hasMore);
@@ -182,34 +217,36 @@ export default function ChatPage({ me, onLogout }) {
     }
   }
 
-  async function sendMessage(body) {
+  async function sendMessage(body: string): Promise<void> {
     const socket = socketRef.current;
-    if (!socket?.connected) throw new Error("You're offline — message not sent");
+    if (!socket?.connected || !active) throw new Error("You're offline — message not sent");
     let res;
     try {
       res = await socket.timeout(5000).emitWithAck('message:send', { to: active.id, body });
     } catch {
       throw new Error('Message timed out — try again');
     }
-    if (res.error) throw new Error(res.error);
+    if (!res.ok) throw new Error(res.error);
   }
 
-  function sendTyping(isTyping) {
+  function sendTyping(isTyping: boolean) {
     if (active) socketRef.current?.emit('typing', { to: active.id, typing: isTyping });
   }
 
-  async function handleLogout() {
+  function handleLogout() {
     socketRef.current?.disconnect();
     onLogout();
   }
 
-  const isOnline = (user) => online[user.id] ?? user.online ?? false;
+  const isOnline = (user: { id: number; online?: boolean }) => online[user.id] ?? user.online ?? false;
 
   return (
     <div className={`chat-layout ${active ? 'has-active' : ''}`}>
       <Sidebar
         me={me}
         conversations={conversations}
+        people={people}
+        onShowPeople={refreshPeople}
         activeId={active?.id}
         typing={typing}
         isOnline={isOnline}

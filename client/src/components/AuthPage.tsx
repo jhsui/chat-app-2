@@ -1,8 +1,13 @@
-import { useState } from 'react';
-import { api } from '../api.js';
+import { useState, type FormEvent } from 'react';
+import type { PublicUser } from '../../../shared/types';
+import { api, errorMessage } from '../api.ts';
 
-export default function AuthPage({ onAuthenticated }) {
-  const [mode, setMode] = useState('login');
+interface AuthPageProps {
+  onAuthenticated: (user: PublicUser) => void;
+}
+
+export default function AuthPage({ onAuthenticated }: AuthPageProps) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -10,7 +15,7 @@ export default function AuthPage({ onAuthenticated }) {
 
   const isLogin = mode === 'login';
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setBusy(true);
@@ -18,7 +23,7 @@ export default function AuthPage({ onAuthenticated }) {
       const { user } = isLogin ? await api.login(username, password) : await api.register(username, password);
       onAuthenticated(user);
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
       setBusy(false);
     }
   }

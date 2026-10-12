@@ -1,8 +1,8 @@
 {
   "name": "chat-app",
   "private": true,
-  "version": "0.1.0",
-  "description": "Real-time chat app with accounts and private direct messages (React + Express + Socket.IO + SQLite)",
+  "version": "0.2.0",
+  "description": "Real-time chat app with accounts and private direct messages (React + Express + Socket.IO + SQLite, in TypeScript)",
   "workspaces": [
     "server",
     "client"
@@ -12,8 +12,9 @@
   },
   "scripts": {
     "dev": "concurrently -n server,client -c blue,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
-    "build": "npm run build -w client",
+    "build": "npm run build -w client && npm run build -w server",
     "start": "npm run start -w server",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
     "test": "npm test -w server"
   },
   "devDependencies": {

@@ -1,8 +1,32 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { formatDay, formatTime, isSameDay } from '../format.js';
-import Avatar from './Avatar.jsx';
+import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
+import type { Message, PublicUser } from '../../../shared/types';
+import { errorMessage } from '../api.ts';
+import { formatDay, formatTime, isSameDay, msBetween } from '../format.ts';
+import Avatar from './Avatar.tsx';
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
+
+interface ChatWindowProps {
+  me: PublicUser;
+  user: PublicUser;
+  online: boolean;
+  typing: boolean;
+  messages: Message[];
+  hasMore: boolean;
+  loading: boolean;
+  onLoadOlder: () => void;
+  /** Resolves when the server accepts the message; rejects with a readable error. */
+  onSend: (body: string) => Promise<void>;
+  onTyping: (typing: boolean) => void;
+  onBack: () => void;
+}
+
+interface ScrollState {
+  firstId: number | null;
+  lastId: number | null;
+  height: number;
+  nearBottom: boolean;
+}
 
 export default function ChatWindow({
   me,
@@ -16,13 +40,13 @@ export default function ChatWindow({
   onSend,
   onTyping,
   onBack,
-}) {
+}: ChatWindowProps) {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
-  const listRef = useRef(null);
-  const inputRef = useRef(null);
-  const scrollState = useRef({ firstId: null, lastId: null, height: 0, nearBottom: true });
-  const typingState = useRef({ active: false, timer: null });
+  const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const scrollState = useRef<ScrollState>({ firstId: null, lastId: null, height: 0, nearBottom: true });
+  const typingState = useRef<{ active: boolean; timer?: ReturnType<typeof setTimeout> }>({ active: false });
 
   // Keep the view pinned to the newest message, but don't yank the user down
   // if they've scrolled up to read history. When older messages are added on
@@ -57,6 +81,7 @@ export default function ChatWindow({
 
   function handleScroll() {
     const el = listRef.current;
+    if (!el) return;
     scrollState.current.nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     scrollState.current.height = el.scrollHeight;
     if (el.scrollTop < 40 && hasMore && !loading) onLoadOlder();
@@ -71,7 +96,7 @@ export default function ChatWindow({
     }
   }
 
-  function handleChange(e) {
+  function handleChange(e: ChangeEvent<HTMLTextAreaElement>) {
     setDraft(e.target.value);
     setError('');
     const t = typingState.current;
@@ -83,7 +108,7 @@ export default function ChatWindow({
     t.timer = setTimeout(stopTyping, 2000);
   }
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e?: FormEvent<HTMLFormElement>) {
     e?.preventDefault();
     const body = draft.trim();
     if (!body) return;
@@ -94,20 +119,20 @@ export default function ChatWindow({
     try {
       await onSend(body);
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
       setDraft((current) => current || body);
     }
   }
 
-  function handleKeyDown(e) {
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      handleSubmit();
+      void handleSubmit();
     }
   }
 
   // My most recent message shows "Sent" or "Seen".
-  const lastMineId = [...messages].reverse().find((m) => m.senderId === me.id)?.id;
+  const lastMineId = messages.findLast((m) => m.senderId === me.id)?.id;
 
   return (
     <section className="chat">
@@ -140,12 +165,12 @@ export default function ChatWindow({
           const mine = m.senderId === me.id;
           const newDay = !prev || !isSameDay(prev.createdAt, m.createdAt);
           const groupedWithPrev =
-            !newDay && prev?.senderId === m.senderId && new Date(m.createdAt) - new Date(prev.createdAt) < GROUP_GAP_MS;
+            !newDay && prev?.senderId === m.senderId && msBetween(prev.createdAt, m.createdAt) < GROUP_GAP_MS;
           const groupedWithNext =
-            next &&
+            !!next &&
             next.senderId === m.senderId &&
             isSameDay(m.createdAt, next.createdAt) &&
-            new Date(next.createdAt) - new Date(m.createdAt) < GROUP_GAP_MS;
+            msBetween(m.createdAt, next.createdAt) < GROUP_GAP_MS;
 
           return (
             <div key={m.id}>
