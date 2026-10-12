@@ -1,0 +1,16 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// In development the React app runs on :5173 and forwards API + WebSocket
+// traffic to the Express server on :3001, so everything is same-origin and
+// the auth cookie just works.
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': 'http://localhost:3001',
+      '/socket.io': { target: 'http://localhost:3001', ws: true },
+    },
+  },
+});

@@ -1,0 +1,22 @@
+{
+  "name": "chat-app",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Real-time chat app with accounts and private direct messages (React + Express + Socket.IO + SQLite)",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client",
+    "start": "npm run start -w server",
+    "test": "npm test -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
