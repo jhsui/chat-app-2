@@ -41,10 +41,27 @@ const fakeStorage = {
   },
 };
 
+/** Same for the private chat-images bucket: files can only be read back by key. */
+const fakeChatImages = {
+  files: new Map<string, Buffer>(),
+  async save(key: string, data: Buffer) {
+    this.files.set(key, data);
+  },
+  async read(key: string) {
+    const data = this.files.get(key);
+    if (!data) throw new Error(`No such file: ${key}`);
+    return data;
+  },
+  async remove(key: string) {
+    this.files.delete(key);
+  },
+};
+
 before(async () => {
   server = await createServer({
     db: await testDbConfig(),
     avatarStorage: fakeStorage,
+    chatImageStorage: fakeChatImages,
   });
   await new Promise<void>((resolve) => server.httpServer.listen(0, resolve));
   baseUrl = `http://localhost:${(server.httpServer.address() as AddressInfo).port}`;
@@ -74,14 +91,15 @@ function client() {
       if (setCookie) cookie = setCookie.split(";")[0] ?? "";
       return { status: res.status, body: await res.json() };
     },
-    /** Sends raw bytes, like the browser does for avatar uploads. */
+    /** Sends raw bytes, like the browser does for avatar and image uploads. */
     async upload(
       path: string,
       data: Buffer,
       contentType: string,
+      method = "PUT",
     ): Promise<{ status: number; body: any }> {
       const res = await fetch(baseUrl + path, {
-        method: "PUT",
+        method,
         headers: { "Content-Type": contentType, cookie },
         body: new Uint8Array(data),
       });
@@ -487,10 +505,107 @@ test("avatars: upload, replace, remove, and live updates", async () => {
   watcher.disconnect();
 });
 
-test("avatar uploads explain when storage isn't configured", async () => {
+test("image messages: upload, live delivery, history and validation", async () => {
+  const bobId: number = (await bob.request("GET", "/api/auth/me")).body.user.id;
+  const aliceId: number = (await alice.request("GET", "/api/auth/me")).body.user
+    .id;
+  const aSock = await socketFor(alice);
+  const bSock = await socketFor(bob);
+  const send = (
+    c: Client,
+    to: number,
+    data: Buffer,
+    size = "width=800&height=600",
+  ) =>
+    c.upload(`/api/messages/${to}/image?${size}`, data, "image/webp", "POST");
+
+  // Both sides get the message live, with where to load the picture and its size.
+  const bobGets = once(bSock, "message:new");
+  const aliceGets = once(aSock, "message:new");
+  let r = await send(alice, bobId, WEBP);
+  assert.equal(r.status, 201);
+  const sent = r.body.message;
+  assert.equal(sent.senderId, aliceId);
+  assert.equal(sent.recipientId, bobId);
+  assert.equal(sent.body, "");
+  assert.equal(sent.image.url, `/api/images/${sent.id}`);
+  assert.equal(sent.image.width, 800);
+  assert.equal(sent.image.height, 600);
+  assert.deepEqual(await bobGets, sent);
+  assert.deepEqual(await aliceGets, sent);
+  assert.equal(fakeChatImages.files.size, 1);
+  assert.equal(fakeStorage.files.size, 0, "not in the public avatars bucket");
+
+  // The file is served to the two people in the conversation, and nobody else.
+  const fetchImage = (c: Client, path: string = sent.image.url) =>
+    fetch(baseUrl + path, { headers: { cookie: c.cookie } });
+  for (const who of [alice, bob]) {
+    const res = await fetchImage(who);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("content-type"), "image/webp");
+    assert.match(res.headers.get("cache-control") ?? "", /^private,/);
+    assert.deepEqual(Buffer.from(await res.arrayBuffer()), WEBP);
+  }
+  const carol = client();
+  await carol.request("POST", "/api/auth/login", {
+    username: "carol",
+    password: "secret1",
+  });
+  assert.equal((await fetchImage(carol)).status, 404, "not her conversation");
+  assert.equal((await fetchImage(client())).status, 401, "not signed in");
+  assert.equal(
+    (await fetchImage(alice, "/api/images/99999999999")).status,
+    404,
+  );
+
+  // It's in the history next to text messages, and it's the conversation's preview.
+  const history = (await bob.request("GET", `/api/messages/${aliceId}`)).body;
+  assert.deepEqual(history.messages.at(-1), sent);
+  const text = history.messages[0];
+  assert.equal(text.image, null, "text messages have no image");
+  assert.equal((await fetchImage(alice, `/api/images/${text.id}`)).status, 404);
+  const previewOf = async () =>
+    (await bob.request("GET", "/api/conversations")).body.conversations.find(
+      (c: { id: number }) => c.id === aliceId,
+    );
+  assert.equal((await previewOf()).lastIsImage, true);
+  await bSock.emitWithAck("message:send", { to: aliceId, body: "nice pic" });
+  assert.equal((await previewOf()).lastIsImage, false);
+
+  // Bad uploads are rejected and nothing is stored.
+  r = await send(alice, bobId, Buffer.from("<svg onload=alert(1)>"));
+  assert.equal(
+    r.status,
+    400,
+    "the file signature decides, not the Content-Type",
+  );
+  r = await send(alice, bobId, WEBP, "width=0&height=600");
+  assert.equal(r.status, 400);
+  r = await send(alice, bobId, WEBP, "");
+  assert.equal(r.status, 400, "the size is required");
+  r = await send(alice, aliceId, WEBP);
+  assert.equal(r.status, 400, "can't message yourself");
+  r = await send(alice, 99_999_999_999, WEBP);
+  assert.equal(r.status, 404);
+  r = await send(
+    alice,
+    bobId,
+    Buffer.concat([WEBP, Buffer.alloc(1100 * 1024)]),
+  );
+  assert.equal(r.status, 413);
+  r = await send(client(), bobId, WEBP);
+  assert.equal(r.status, 401);
+  assert.equal(fakeChatImages.files.size, 1);
+
+  aSock.disconnect();
+  bSock.disconnect();
+});
+
+test("uploads explain when storage isn't configured", async () => {
   const bare = await createServer({
     db: { pgliteDir: "memory://" },
     avatarStorage: null,
+    chatImageStorage: null,
   });
   await new Promise<void>((resolve) => bare.httpServer.listen(0, resolve));
   const url = `http://localhost:${(bare.httpServer.address() as AddressInfo).port}`;
@@ -509,6 +624,13 @@ test("avatar uploads explain when storage isn't configured", async () => {
     assert.equal(res.status, 503);
     const body = (await res.json()) as { error: string };
     assert.match(body.error, /Supabase/);
+
+    const image = await fetch(`${url}/api/messages/1/image?width=1&height=1`, {
+      method: "POST",
+      headers: { "Content-Type": "image/png", cookie },
+      body: new Uint8Array(PNG),
+    });
+    assert.equal(image.status, 503);
   } finally {
     await bare.close();
   }

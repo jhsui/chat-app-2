@@ -9,6 +9,7 @@ import type {
   ServerToClientEvents,
 } from "../../../shared/types";
 import { ApiError, api } from "../api.ts";
+import type { ChatImage } from "../image.ts";
 import Sidebar from "./Sidebar.tsx";
 import ChatWindow from "./ChatWindow.tsx";
 import ProfileDialog from "./ProfileDialog.tsx";
@@ -165,6 +166,7 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
         const updated: Conversation = {
           ...current,
           lastBody: msg.body,
+          lastIsImage: msg.image !== null,
           lastSenderId: msg.senderId,
           lastAt: msg.createdAt,
           unread: isActive ? 0 : current.unread + (incoming ? 1 : 0),
@@ -292,6 +294,14 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
     if (!res.ok) throw new Error(res.error);
   }
 
+  // Images are uploaded over HTTP; the server then announces the new message
+  // over the socket like any other, which is what adds it to the chat.
+  async function sendImage(image: ChatImage): Promise<void> {
+    if (!socketRef.current?.connected || !active)
+      throw new Error("You're offline — image not sent");
+    await api.sendImage(active.id, image);
+  }
+
   function sendTyping(isTyping: boolean) {
     if (active)
       socketRef.current?.emit("typing", { to: active.id, typing: isTyping });
@@ -337,6 +347,7 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
           loading={loading}
           onLoadOlder={loadOlder}
           onSend={sendMessage}
+          onSendImage={sendImage}
           onTyping={sendTyping}
           onBack={closeConversation}
           onShowProfile={() => setProfileId(active.id)}

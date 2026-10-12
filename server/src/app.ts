@@ -6,16 +6,23 @@ import path from "node:path";
 import { requireAuth } from "./auth.js";
 import { openDb, type Db, type DbConfig } from "./db.js";
 import { createPresence } from "./presence.js";
-import { attachSocket, type ChatServer } from "./socket.js";
+import { attachSocket, emitNewMessage, type ChatServer } from "./socket.js";
 import { authRoutes } from "./routes/auth.js";
 import { chatRoutes } from "./routes/chat.js";
 import { MAX_AVATAR_BYTES, profileRoutes } from "./routes/profile.js";
-import { storageFromEnv, type AvatarStorage } from "./storage.js";
+import {
+  chatImageStorageFromEnv,
+  storageFromEnv,
+  type AvatarStorage,
+  type ChatImageStorage,
+} from "./storage.js";
 
 export interface ServerOptions {
   db: DbConfig;
   /** Where avatars go. Defaults to Supabase from env vars (null if not configured). */
   avatarStorage?: AvatarStorage | null;
+  /** Where pictures sent in chats go (a private bucket). Same default. */
+  chatImageStorage?: ChatImageStorage | null;
   clientDist?: string;
   corsOrigin?: string;
 }
@@ -35,6 +42,7 @@ export interface ChatApp {
 export async function createServer({
   db: dbConfig,
   avatarStorage = storageFromEnv(),
+  chatImageStorage = chatImageStorageFromEnv(),
   clientDist,
   corsOrigin,
 }: ServerOptions): Promise<ChatApp> {
@@ -56,7 +64,9 @@ export async function createServer({
   app.use(
     "/api",
     requireAuth(db),
-    chatRoutes(db, presence),
+    chatRoutes(db, presence, chatImageStorage, (message) =>
+      emitNewMessage(io, message),
+    ),
     profileRoutes(db, presence, avatarStorage, (user) =>
       io.emit("profile:updated", user),
     ),

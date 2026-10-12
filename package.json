@@ -2,7 +2,7 @@
   "name": "chat-app",
   "private": true,
   "version": "0.2.0",
-  "description": "Real-time chat app with accounts and private direct messages (React + Express + Socket.IO + SQLite, in TypeScript)",
+  "description": "Real-time chat app with accounts and private direct messages (React + Express + Socket.IO + PostgreSQL, in TypeScript)",
   "workspaces": [
     "server",
     "client"

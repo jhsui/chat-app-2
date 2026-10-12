@@ -4,10 +4,11 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ClipboardEvent,
   type SubmitEvent,
   type KeyboardEvent,
 } from "react";
-import type { Message, PublicUser } from "../../../shared/types";
+import type { Message, MessageImage, PublicUser } from "../../../shared/types";
 import { errorMessage } from "../api.ts";
 import {
   formatDay,
@@ -16,10 +17,54 @@ import {
   msBetween,
   nameOf,
 } from "../format.ts";
+import { toChatImage, type ChatImage } from "../image.ts";
 import { cx, ui } from "../ui.ts";
 import Avatar from "./Avatar.tsx";
+import ImageViewer from "./ImageViewer.tsx";
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
+/** The largest a picture is shown inside the chat, in pixels. */
+const MAX_THUMB = { width: 280, height: 320 };
+
+/**
+ * A picture in the chat. Its box is sized from the stored dimensions, so the
+ * list doesn't jump around as the files load.
+ */
+function ImageBubble({
+  image,
+  title,
+  onOpen,
+}: {
+  image: MessageImage;
+  title: string;
+  onOpen: () => void;
+}) {
+  const scale = Math.min(
+    1,
+    MAX_THUMB.width / image.width,
+    MAX_THUMB.height / image.height,
+  );
+  return (
+    <button
+      type="button"
+      className="block max-w-full overflow-hidden rounded-[18px] bg-bubble"
+      title={title}
+      onClick={onOpen}
+      aria-label="View image"
+    >
+      <img
+        src={image.url}
+        alt="Image"
+        loading="lazy"
+        className="block max-h-80 max-w-full object-cover"
+        style={{
+          width: Math.max(48, Math.round(image.width * scale)),
+          aspectRatio: `${image.width} / ${image.height}`,
+        }}
+      />
+    </button>
+  );
+}
 
 interface ChatWindowProps {
   me: PublicUser;
@@ -32,6 +77,8 @@ interface ChatWindowProps {
   onLoadOlder: () => void;
   /** Resolves when the server accepts the message; rejects with a readable error. */
   onSend: (body: string) => Promise<void>;
+  /** Same, for a picture. */
+  onSendImage: (image: ChatImage) => Promise<void>;
   onTyping: (typing: boolean) => void;
   onBack: () => void;
   /** Opens this person's profile. */
@@ -55,14 +102,23 @@ export default function ChatWindow({
   loading,
   onLoadOlder,
   onSend,
+  onSendImage,
   onTyping,
   onBack,
   onShowProfile,
 }: ChatWindowProps) {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
+  // The picture waiting to be sent, shown above the text box.
+  const [attachment, setAttachment] = useState<{
+    image: ChatImage;
+    previewUrl: string;
+  } | null>(null);
+  const [sendingImage, setSendingImage] = useState(false);
+  const [viewing, setViewing] = useState<MessageImage | null>(null); // picture opened large
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const scrollState = useRef<ScrollState>({
     firstId: null,
     lastId: null,
@@ -107,6 +163,12 @@ export default function ChatWindow({
     return () => clearTimeout(t.timer);
   }, []);
 
+  // Free the preview's memory when the attachment is replaced, sent or removed.
+  useEffect(() => {
+    if (!attachment) return;
+    return () => URL.revokeObjectURL(attachment.previewUrl);
+  }, [attachment]);
+
   function handleScroll() {
     const el = listRef.current;
     if (!el) return;
@@ -137,19 +199,56 @@ export default function ChatWindow({
     t.timer = setTimeout(stopTyping, 2000);
   }
 
+  /** Attaches a picked or pasted picture; it's sent with the Send button. */
+  async function attach(file: File) {
+    setError("");
+    try {
+      const image = await toChatImage(file);
+      setAttachment({ image, previewUrl: URL.createObjectURL(image.blob) });
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+    inputRef.current?.focus();
+  }
+
+  function handleFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // so picking the same file again still triggers a change
+    if (file) void attach(file);
+  }
+
+  function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const file = Array.from(e.clipboardData.files).find((f) =>
+      f.type.startsWith("image/"),
+    );
+    if (!file) return; // plain text: let the browser paste it
+    e.preventDefault();
+    void attach(file);
+  }
+
   async function handleSubmit(e?: SubmitEvent<HTMLFormElement>) {
     e?.preventDefault();
     const body = draft.trim();
-    if (!body) return;
+    const pending = attachment;
+    if ((!body && !pending) || sendingImage) return;
     // Clear right away so fast typers can keep going; put the text back if it fails.
     setDraft("");
     stopTyping();
     inputRef.current?.focus();
     try {
-      await onSend(body);
+      // A picture and text go out as two messages, picture first.
+      if (pending) {
+        setSendingImage(true);
+        await onSendImage(pending.image);
+        // Unless it was swapped for another picture while this one was uploading.
+        setAttachment((current) => (current === pending ? null : current));
+      }
+      if (body) await onSend(body);
     } catch (err) {
       setError(errorMessage(err));
       setDraft((current) => current || body);
+    } finally {
+      setSendingImage(false);
     }
   }
 
@@ -246,17 +345,25 @@ export default function ChatWindow({
                   mine ? "items-end self-end" : "items-start self-start",
                 )}
               >
-                <div
-                  className={cx(
-                    "rounded-[18px] px-3 py-2 whitespace-pre-wrap wrap-anywhere",
-                    mine
-                      ? "rounded-br-md bg-accent text-white"
-                      : "rounded-bl-md bg-bubble",
-                  )}
-                  title={new Date(m.createdAt).toLocaleString()}
-                >
-                  {m.body}
-                </div>
+                {m.image ? (
+                  <ImageBubble
+                    image={m.image}
+                    title={new Date(m.createdAt).toLocaleString()}
+                    onOpen={() => setViewing(m.image)}
+                  />
+                ) : (
+                  <div
+                    className={cx(
+                      "rounded-[18px] px-3 py-2 whitespace-pre-wrap wrap-anywhere",
+                      mine
+                        ? "rounded-br-md bg-accent text-white"
+                        : "rounded-bl-md bg-bubble",
+                    )}
+                    title={new Date(m.createdAt).toLocaleString()}
+                  >
+                    {m.body}
+                  </div>
+                )}
                 {!groupedWithNext && (
                   <div className="mt-0.5 px-1 text-xs text-muted">
                     {formatTime(m.createdAt)}
@@ -297,12 +404,69 @@ export default function ChatWindow({
             {error}
           </p>
         )}
+        {attachment && (
+          <div className="basis-full">
+            <div className="relative inline-block">
+              <img
+                src={attachment.previewUrl}
+                alt="Image to send"
+                className="block h-20 max-w-40 rounded-xl border border-line object-cover"
+              />
+              {sendingImage ? (
+                <span className="absolute inset-0 grid place-items-center rounded-xl bg-black/50 text-xs font-semibold text-white">
+                  Sending…
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="absolute -top-2 -right-2 grid size-6 place-items-center rounded-full border border-line bg-panel leading-none text-muted hover:text-fg"
+                  onClick={() => setAttachment(null)}
+                  aria-label="Remove image"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFile}
+          aria-label="Choose an image to send"
+        />
+        <button
+          type="button"
+          className="grid size-10.5 flex-none place-items-center rounded-full text-muted hover:enabled:bg-panel-2 hover:enabled:text-fg disabled:opacity-50"
+          onClick={() => fileRef.current?.click()}
+          disabled={sendingImage}
+          aria-label="Attach an image"
+          title="Attach an image"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="size-5.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="3" y="4" width="18" height="16" rx="3" />
+            <circle cx="8.5" cy="9.5" r="1.5" />
+            <path d="m21 15-4.5-4.5L7 20" />
+          </svg>
+        </button>
         <textarea
           ref={inputRef}
           rows={1}
           value={draft}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           onBlur={stopTyping}
           placeholder={`Message ${nameOf(user)}`}
           maxLength={2000}
@@ -315,11 +479,14 @@ export default function ChatWindow({
         <button
           className={cx(ui.primaryBase, "h-10.5 rounded-[21px] px-4")}
           type="submit"
-          disabled={!draft.trim()}
+          disabled={(!draft.trim() && !attachment) || sendingImage}
         >
           Send
         </button>
       </form>
+      {viewing && (
+        <ImageViewer image={viewing} onClose={() => setViewing(null)} />
+      )}
     </section>
   );
 }

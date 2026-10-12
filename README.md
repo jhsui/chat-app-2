@@ -11,6 +11,7 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 - **Profiles:** upload an avatar (cropped and resized in the browser, stored in Supabase Storage), set a display name and a short bio, and view other people's profiles. Changes show up live for everyone
 - Search for people by username or display name and start a conversation
 - Messages arrive instantly over WebSockets and are saved to PostgreSQL
+- **Images:** attach a picture with the image button or paste one from the clipboard; it's shrunk in the browser, stored in a private Supabase Storage bucket that only the two people in the conversation can load from, and opens full-size when clicked
 - Conversation list sorted by latest message, with unread badges
 - Online / offline status, typing indicator, and "Sent / Seen" read receipts
 - Message history with "load older" pagination
@@ -46,21 +47,23 @@ Both run exactly the same SQL (`server/src/db.ts`). Tables are created automatic
 - To browse the data, point any Postgres client (pgAdmin, TablePlus, `psql`) at your `DATABASE_URL`. PGlite's folder can only be opened by the app itself.
 - Tests use a throwaway in-memory PGlite by default. `TEST_DATABASE_URL=postgres://... npm test` runs them against a real server instead (**it wipes the `users` and `messages` tables in that database**).
 
-## Avatars (Supabase Storage)
+## Avatars and chat images (Supabase Storage)
 
-Profile pictures are stored in a [Supabase Storage](https://supabase.com/docs/guides/storage) bucket; the database only keeps each avatar's URL. Everything else works without it. Until it's configured, uploading a photo shows "Avatar uploads aren't set up on this server yet".
+Profile pictures and pictures sent in chats are stored in two [Supabase Storage](https://supabase.com/docs/guides/storage) buckets, a public one for avatars and a private one for chat images; the database only keeps where each file is. Everything else works without it. Until it's configured, uploading a photo shows "Avatar uploads aren't set up on this server yet" (or "Sending images isn't set up…" in a chat).
 
 One-time setup:
 
 1. Create a free project at [supabase.com](https://supabase.com).
 2. **Storage → New bucket** → name it `avatars` and turn on **Public bucket** (so the images can be shown in `<img>` tags). Optionally limit it to `image/*` and 1 MB.
+   Then create a second bucket named `chat-images` and leave **Public bucket** off. The same optional limits work (chat images are at most 1 MB).
 3. **Project Settings → API Keys** → copy the **secret** key (`sb_secret_…`; the older `service_role` key also works), and copy the project URL.
 4. Add them to `server/.env` (and later to Railway's variables):
 
    ```bash
    SUPABASE_URL=https://your-project-ref.supabase.co
    SUPABASE_SECRET_KEY=sb_secret_...
-   # SUPABASE_BUCKET=avatars   # only if you named the bucket differently
+   # SUPABASE_BUCKET=avatars            # only if you named the buckets differently
+   # SUPABASE_CHAT_BUCKET=chat-images
    ```
 
 5. Restart `npm run dev`.
@@ -71,7 +74,15 @@ How it works:
 - The server checks the file's first bytes to confirm it's really a PNG/JPEG/WebP, uploads it with the secret key, saves the public URL, and deletes the previous avatar file.
 - Each upload gets a new file name, so browsers can cache avatars aggressively without showing an outdated picture.
 - The secret key stays on the server. **Never** put it in client code or commit `.env`.
-- Storage is behind a small `AvatarStorage` interface (`server/src/storage.ts`), so tests use an in-memory fake, and switching to S3/R2 would only need a new implementation.
+- Storage is behind two small interfaces, `AvatarStorage` and `ChatImageStorage` (`server/src/storage.ts`), so tests use in-memory fakes, and switching to S3/R2 would only need new implementations.
+
+Chat images go in the private `chat-images` bucket, under `<sender id>/`:
+
+- The browser scales a picture down so its longer side is at most 1600px and re-encodes it as WebP (usually 100–400 KB), which also strips the photo's metadata such as GPS location. Animated GIFs become a still image.
+- It's uploaded with `POST /api/messages/:userId/image` (max 1 MB). The server checks the file signature, stores the file, saves a message with the file's storage path and pixel size, and announces it over the socket like a text message.
+- The pixel size is stored so the chat can reserve the right space before the file loads, instead of jumping as pictures appear.
+- **Privacy:** files in a private bucket have no public URL. A message's `image.url` is `/api/images/<message id>` on this server, which checks the login cookie and only sends the file to the sender and the recipient (anyone else gets a 404). The server fetches the file from Supabase with the secret key and passes it on.
+- Browsers keep their copy (`Cache-Control: private, immutable`), so each picture is fetched through the server once per device, not on every visit.
 
 ## Scripts (run from the project root)
 
@@ -79,7 +90,7 @@ How it works:
 | ------------------- | -------------------------------------------------------------------------------------------- |
 | `npm run dev`       | Server (runs the `.ts` files directly with tsx, restarts on change) + Vite dev server        |
 | `npm run typecheck` | Type-checks the server, tests and client with `tsc`                                          |
-| `npm test`          | Server tests: auth, search, live messaging, read receipts, paging                            |
+| `npm test`          | Server tests: auth, search, live messaging, read receipts, paging, profiles, image messages  |
 | `npm run build`     | Type-checks and builds the client into `client/dist`, compiles the server into `server/dist` |
 | `npm start`         | Runs the compiled server (`server/dist`); serves `client/dist` too                           |
 
@@ -108,6 +119,8 @@ Browser (React)                     Server (Express + Socket.IO)            Post
 ───────────────                     ────────────────────────────            ──────────
 login / register  ── REST /api ──▶  bcrypt check, sets httpOnly JWT cookie ─▶ users
 load chats/history ── REST /api ──▶  /conversations, /messages/:userId  ───▶ messages
+send image        ── REST /api ──▶  store file, save, emit to both users ───▶ messages
+show image        ── REST /api ──▶  /images/:messageId, sender/recipient only
 send message      ── socket ─────▶  validate, save, emit to both users ───▶ messages
                   ◀── socket ─────  message:new · typing · presence · messages:read
 ```
@@ -133,8 +146,8 @@ chat-app/
 │   │   ├── auth.ts          JWT cookie helpers + requireAuth middleware
 │   │   ├── socket.ts        real-time events
 │   │   ├── presence.ts      online tracking
-│   │   ├── storage.ts       Supabase Storage for avatars + image type check
-│   │   └── routes/          auth.ts (register/login/logout/me), chat.ts (users, conversations, messages),
+│   │   ├── storage.ts       Supabase Storage for avatars and chat images + image type check
+│   │   └── routes/          auth.ts (register/login/logout/me), chat.ts (users, conversations, messages, send/serve images),
 │   │                        profile.ts (view/edit profile, upload/remove avatar)
 │   ├── test/chat.test.ts    node:test suite (run with tsx)
 │   └── data/pglite/         local PGlite database (created on first run, git-ignored)
@@ -144,8 +157,8 @@ chat-app/
     └── src/
         ├── App.tsx          session check → AuthPage or ChatPage
         ├── api.ts           typed fetch wrapper
-        ├── components/      AuthPage, ChatPage (socket + state), Sidebar, ChatWindow, ProfileDialog, Avatar
-        ├── image.ts         crops/resizes a photo into a 256×256 avatar before upload
+        ├── components/      AuthPage, ChatPage (socket + state), Sidebar, ChatWindow, ImageViewer, ProfileDialog, Avatar
+        ├── image.ts         resizes photos in the browser before upload (avatars and chat images)
         ├── ui.ts           shared Tailwind class strings + cx() helper
         └── styles.css      Tailwind entry: theme tokens (light/dark), keyframes
 ```
@@ -160,6 +173,8 @@ chat-app/
 |                 |                      | `presence`        | `{ userId, online }`             |
 |                 |                      | `profile:updated` | `PublicUser` (new name/avatar)   |
 
+Image messages are sent with `POST /api/messages/:userId/image?width=…&height=…` (the image bytes as the body, ≤ 1 MB) and arrive as a `message:new` whose `image` is `{ url, width, height }`. The `url` is `GET /api/images/:messageId`, which serves the file to the sender and recipient only.
+
 ## Profile API
 
 | Method & path           | Body                   | Does                                          |
@@ -172,7 +187,7 @@ chat-app/
 ## Ideas for next steps
 
 - Group chats (a `conversations` + `participants` table instead of sender/recipient pairs)
-- Image / file attachments
+- Captions on images, other file attachments, animated GIFs
 - Rate limiting on login and message sending (e.g. `express-rate-limit`)
 - Edit / delete messages, emoji reactions
 - Deploy (Railway, Render or Fly.io) — add a Postgres database, and set `DATABASE_URL`, `JWT_SECRET` and `NODE_ENV=production`

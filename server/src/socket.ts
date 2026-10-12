@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import { parse as parseCookie } from "cookie";
 import type {
   ClientToServerEvents,
+  Message,
   PublicUser,
   ServerToClientEvents,
 } from "../../shared/types.js";
@@ -24,6 +25,13 @@ export type ChatServer = Server<
   Record<string, never>,
   SocketData
 >;
+
+/** Delivers a new message to every open tab of both people in the conversation. */
+export function emitNewMessage(io: ChatServer, message: Message): void {
+  io.to(room(message.recipientId))
+    .to(room(message.senderId))
+    .emit("message:new", message);
+}
 
 /**
  * Real-time layer. Every connected socket joins a private room named after
@@ -82,7 +90,7 @@ export function attachSocket(
 
         try {
           const message = await db.createMessage(me.id, to, body);
-          io.to(room(to)).to(room(me.id)).emit("message:new", message);
+          emitNewMessage(io, message);
           reply({ ok: true, message });
         } catch (err) {
           console.error(err);

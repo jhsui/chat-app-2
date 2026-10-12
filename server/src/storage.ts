@@ -15,25 +15,38 @@ export interface AvatarStorage {
   remove(key: string): Promise<void>;
 }
 
+/**
+ * Where pictures sent in chats are kept. Unlike avatars these are private:
+ * files have no public URL, so the only way to get one is through the server,
+ * which checks who's asking first (GET /api/images/:messageId).
+ */
+export interface ChatImageStorage {
+  save(key: string, data: Buffer, contentType: string): Promise<void>;
+  read(key: string): Promise<Buffer>;
+  remove(key: string): Promise<void>;
+}
+
 export interface SupabaseStorageOptions {
   /** Project URL, e.g. https://abcd1234.supabase.co */
   url: string;
   /** Secret key (sb_secret_…) or legacy service_role key. Server-side only! */
   secretKey: string;
-  /** A *public* bucket, so avatar URLs can be shown in <img> tags. */
+  /** A *public* bucket for avatars (so their URLs can be shown in <img> tags), a *private* one for chat images. */
   bucket: string;
 }
 
-/** Avatar storage backed by a Supabase Storage bucket. */
-export function createSupabaseStorage({
-  url,
-  secretKey,
-  bucket,
-}: SupabaseStorageOptions): AvatarStorage {
+function bucketFiles({ url, secretKey, bucket }: SupabaseStorageOptions) {
   const supabase = createClient(url, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const files = supabase.storage.from(bucket);
+  return supabase.storage.from(bucket);
+}
+
+/** Avatar storage backed by a public Supabase Storage bucket. */
+export function createSupabaseStorage(
+  options: SupabaseStorageOptions,
+): AvatarStorage {
+  const files = bucketFiles(options);
 
   return {
     async save(key, data, contentType) {
@@ -46,6 +59,32 @@ export function createSupabaseStorage({
       });
       if (error) throw new Error(`Supabase upload failed: ${error.message}`);
       return { url: files.getPublicUrl(key).data.publicUrl };
+    },
+    async remove(key) {
+      const { error } = await files.remove([key]);
+      if (error) throw new Error(`Supabase delete failed: ${error.message}`);
+    },
+  };
+}
+
+/** Chat image storage backed by a private Supabase Storage bucket. */
+export function createSupabaseChatImageStorage(
+  options: SupabaseStorageOptions,
+): ChatImageStorage {
+  const files = bucketFiles(options);
+
+  return {
+    async save(key, data, contentType) {
+      const { error } = await files.upload(key, data, {
+        contentType,
+        upsert: false,
+      });
+      if (error) throw new Error(`Supabase upload failed: ${error.message}`);
+    },
+    async read(key) {
+      const { data, error } = await files.download(key);
+      if (error) throw new Error(`Supabase download failed: ${error.message}`);
+      return Buffer.from(await data.arrayBuffer());
     },
     async remove(key) {
       const { error } = await files.remove([key]);
@@ -69,6 +108,20 @@ export function storageFromEnv(
     url,
     secretKey,
     bucket: env.SUPABASE_BUCKET || "avatars",
+  });
+}
+
+/** Same, for chat images: the private bucket named by SUPABASE_CHAT_BUCKET. */
+export function chatImageStorageFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): ChatImageStorage | null {
+  const url = env.SUPABASE_URL;
+  const secretKey = env.SUPABASE_SECRET_KEY;
+  if (!url || !secretKey) return null;
+  return createSupabaseChatImageStorage({
+    url,
+    secretKey,
+    bucket: env.SUPABASE_CHAT_BUCKET || "chat-images",
   });
 }
 

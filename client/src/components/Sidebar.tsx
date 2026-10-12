@@ -275,7 +275,7 @@ export default function Sidebar({
               const preview = typing[c.id] ? (
                 <em className={row.typing}>typing…</em>
               ) : (
-                `${c.lastSenderId === me.id ? "You: " : ""}${c.lastBody}`
+                `${c.lastSenderId === me.id ? "You: " : ""}${c.lastIsImage ? "📷 Photo" : c.lastBody}`
               );
               return (
                 <li key={c.id}>

@@ -1,7 +1,10 @@
-import { Router, type Request, type Response } from "express";
+import { randomUUID } from "node:crypto";
+import express, { Router, type Request, type Response } from "express";
 import type {
   ConversationsResponse,
   ErrorResponse,
+  Message,
+  MessageResponse,
   MessagesResponse,
   PeopleResponse,
   UsersResponse,
@@ -9,8 +12,27 @@ import type {
 import { currentUser } from "../auth.js";
 import { isValidId, toPublicUser, type Db } from "../db.js";
 import type { Presence } from "../presence.js";
+import {
+  detectImageType,
+  IMAGE_EXTENSIONS,
+  type ChatImageStorage,
+} from "../storage.js";
 
-export function chatRoutes(db: Db, presence: Presence): Router {
+/** The browser shrinks pictures to fit before upload (see toChatImage in the client). */
+export const MAX_IMAGE_BYTES = 1024 * 1024;
+const MAX_IMAGE_SIDE = 8192;
+
+/** True if `n` can be an image's width or height in pixels. */
+const isValidSide = (n: number) =>
+  Number.isInteger(n) && n >= 1 && n <= MAX_IMAGE_SIDE;
+
+export function chatRoutes(
+  db: Db,
+  presence: Presence,
+  storage: ChatImageStorage | null,
+  /** Called with each message created here, to deliver it to connected clients. */
+  onMessage: (message: Message) => void,
+): Router {
   const router = Router();
 
   // Find people to message: GET /api/users?q=ali
@@ -78,6 +100,114 @@ export function chatRoutes(db: Db, presence: Presence): Router {
       });
     },
   );
+
+  // Send a picture: POST /api/messages/42/image?width=800&height=600 with the
+  // image bytes as the body. Text messages go over the socket instead; images
+  // use HTTP because they're big and need a size limit and upload errors.
+  router.post(
+    "/messages/:userId/image",
+    express.raw({ type: "image/*", limit: MAX_IMAGE_BYTES }),
+    async (req: Request, res: Response<MessageResponse | ErrorResponse>) => {
+      if (!storage) {
+        res.status(503).json({
+          error:
+            "Sending images isn't set up on this server yet (Supabase Storage isn't configured).",
+        });
+        return;
+      }
+      const me = currentUser(req);
+      const to = Number(req.params.userId);
+      if (to === me.id) {
+        res.status(400).json({ error: "You can't message yourself" });
+        return;
+      }
+      if (!isValidId(to) || !(await db.findUserById(to))) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+      // The client reports the size. It's only used to lay out the chat before
+      // the file loads, so a wrong value can't do more than misshape a bubble.
+      const width = Number(req.query.width);
+      const height = Number(req.query.height);
+      if (!isValidSide(width) || !isValidSide(height)) {
+        res.status(400).json({ error: "Invalid image size" });
+        return;
+      }
+      const data = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      const type = detectImageType(data);
+      if (!type) {
+        res
+          .status(400)
+          .json({ error: "Please send a PNG, JPEG or WebP image" });
+        return;
+      }
+
+      const key = `${me.id}/${randomUUID()}.${IMAGE_EXTENSIONS[type]}`;
+      try {
+        await storage.save(key, data, type);
+      } catch (err) {
+        console.error(err);
+        res
+          .status(502)
+          .json({ error: "Couldn't upload the image. Please try again." });
+        return;
+      }
+
+      let message: Message;
+      try {
+        message = await db.createMessage(me.id, to, "", {
+          key,
+          width,
+          height,
+        });
+      } catch (err) {
+        // Don't leave a file behind that no message points to.
+        storage
+          .remove(key)
+          .catch((e) => console.error("Couldn't delete image", key, e));
+        throw err;
+      }
+      onMessage(message);
+      res.status(201).json({ message });
+    },
+  );
+
+  // A message's picture: GET /api/images/123. The files are in a private
+  // bucket, so this is the only way to get one, and it's only served to the
+  // sender and the recipient. <img> tags send the login cookie automatically.
+  router.get("/images/:messageId", async (req: Request, res: Response) => {
+    const messageId = Number(req.params.messageId);
+    const image = isValidId(messageId)
+      ? await db.findMessageImage(messageId)
+      : undefined;
+    const me = currentUser(req).id;
+    // Same reply whether it doesn't exist or isn't yours, so ids can't be probed.
+    if (!image || (image.senderId !== me && image.recipientId !== me)) {
+      res.status(404).json({ error: "Image not found" });
+      return;
+    }
+    if (!storage) {
+      res.status(503).json({ error: "Image storage isn't configured" });
+      return;
+    }
+
+    let data: Buffer;
+    try {
+      data = await storage.read(image.key);
+    } catch (err) {
+      console.error(err);
+      res.status(502).json({ error: "Couldn't load the image" });
+      return;
+    }
+    res.set({
+      "Content-Type": detectImageType(data) ?? "application/octet-stream",
+      // A message's picture never changes, so the browser can keep its copy;
+      // "private" stops shared caches (proxies, CDNs) from keeping one too.
+      "Cache-Control": "private, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.send(data);
+  });
 
   return router;
 }

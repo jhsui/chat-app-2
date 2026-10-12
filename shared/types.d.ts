@@ -17,11 +17,26 @@ export interface UserWithPresence extends PublicUser {
   online: boolean;
 }
 
+/** A picture sent in a chat. */
+export interface MessageImage {
+  /**
+   * Where to load the file from: a path on this server (/api/images/…), which
+   * only serves it to the two people in the conversation.
+   */
+  url: string;
+  /** Size in pixels, so the chat can reserve space before the file has loaded. */
+  width: number;
+  height: number;
+}
+
 export interface Message {
   id: number;
   senderId: number;
   recipientId: number;
+  /** The text; "" for an image message. */
   body: string;
+  /** The picture, for an image message; null for a text message. */
+  image: MessageImage | null;
   /** ISO 8601 timestamp */
   createdAt: string;
   /** ISO 8601 timestamp, or null while unread */
@@ -44,6 +59,8 @@ export interface Person extends UserWithPresence {
 
 export interface Conversation extends UserWithPresence {
   lastBody: string;
+  /** True if the latest message is a picture (then lastBody is ""). */
+  lastIsImage: boolean;
   lastSenderId: number;
   lastAt: string;
   unread: number;
@@ -75,6 +92,11 @@ export interface MessagesResponse {
   user: UserWithPresence;
   messages: Message[];
   hasMore: boolean;
+}
+
+/** Reply to sending an image message. */
+export interface MessageResponse {
+  message: Message;
 }
 
 export interface ErrorResponse {

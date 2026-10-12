@@ -1,11 +1,13 @@
 import type {
   AuthResponse,
   ConversationsResponse,
+  MessageResponse,
   MessagesResponse,
   PeopleResponse,
   ProfileResponse,
   UsersResponse,
 } from "../../shared/types";
+import type { ChatImage } from "./image.ts";
 
 /** An error from the API, carrying the HTTP status (e.g. 401 when signed out). */
 export class ApiError extends Error {
@@ -61,6 +63,19 @@ export const api = {
   messages: (userId: number, before?: number) =>
     request<MessagesResponse>(
       `/messages/${userId}${before ? `?before=${before}` : ""}`,
+    ),
+  /** Sends a picture (already resized by toChatImage) as a message. */
+  sendImage: async (userId: number, { blob, width, height }: ChatImage) =>
+    parse<MessageResponse>(
+      await fetch(
+        `/api/messages/${userId}/image?width=${width}&height=${height}`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": blob.type },
+          body: blob,
+        },
+      ),
     ),
   profile: (userId: number) => request<ProfileResponse>(`/users/${userId}`),
   updateProfile: (fields: { displayName: string; bio: string }) =>

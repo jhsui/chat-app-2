@@ -45,6 +45,12 @@ const SCHEMA = `
   ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
   -- Where the avatar lives in storage, so the old file can be deleted when it's replaced.
   ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_key TEXT;
+
+  -- Image messages: where the picture lives in (private) storage, and its
+  -- pixel size. body is '' for these.
+  ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_key TEXT;
+  ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_width INTEGER;
+  ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_height INTEGER;
 `;
 
 /** The public user fields, for a query where the users table is aliased as "u". */
@@ -54,7 +60,8 @@ const USER_COLUMNS = `
 
 const MESSAGE_COLUMNS = `
   id, sender_id AS "senderId", recipient_id AS "recipientId", body,
-  created_at AS "createdAt", read_at AS "readAt"
+  created_at AS "createdAt", read_at AS "readAt",
+  (image_key IS NOT NULL) AS "hasImage", image_width AS "imageWidth", image_height AS "imageHeight"
 `;
 
 /** A user's profile as stored, before online status is added. */
@@ -67,6 +74,7 @@ export interface UserWithPassword extends PublicUser {
 /** A conversation as stored, before presence info is added. */
 export interface ConversationRow extends PublicUser {
   lastBody: string;
+  lastIsImage: boolean;
   lastSenderId: number;
   lastAt: string;
   unread: number;
@@ -96,11 +104,19 @@ export interface Db {
   searchUsers(me: number, query: string): Promise<PublicUser[]>;
   /** Every user except `me`, with the time of your latest message together (or null). */
   listPeople(me: number): Promise<(PublicUser & { lastAt: string | null })[]>;
+  /** Pass `image` (already uploaded to storage under `key`) for an image message. */
   createMessage(
     senderId: number,
     recipientId: number,
     body: string,
+    image?: { key: string; width: number; height: number },
   ): Promise<Message>;
+  /** Where a message's picture is stored and who may see it; undefined if it has none. */
+  findMessageImage(
+    messageId: number,
+  ): Promise<
+    { key: string; senderId: number; recipientId: number } | undefined
+  >;
   /** Returns up to `limit` messages older than `before`, oldest first. */
   getMessages(
     a: number,
@@ -114,6 +130,13 @@ export interface Db {
     other: number,
   ): Promise<{ changes: number; upToId: number | null }>;
 }
+
+/**
+ * The URL clients load a message's picture from. The file itself is private,
+ * so this points at our own API (see routes/chat.ts), not at storage.
+ */
+export const messageImagePath = (messageId: number) =>
+  `/api/images/${messageId}`;
 
 /** Picks just the public fields, e.g. to send a user to other clients. */
 export function toPublicUser({
@@ -182,14 +205,29 @@ const iso = (value: Date | string) => new Date(value).toISOString();
 const isoOrNull = (value: Date | string | null) =>
   value === null ? null : iso(value);
 
-type MessageRow = Omit<Message, "createdAt" | "readAt"> & {
+type MessageRow = Omit<Message, "createdAt" | "readAt" | "image"> & {
   createdAt: Date;
   readAt: Date | null;
+  hasImage: boolean;
+  imageWidth: number | null;
+  imageHeight: number | null;
 };
-const toMessage = (row: MessageRow): Message => ({
+const toMessage = ({
+  hasImage,
+  imageWidth,
+  imageHeight,
+  ...row
+}: MessageRow): Message => ({
   ...row,
   createdAt: iso(row.createdAt),
   readAt: isoOrNull(row.readAt),
+  image: hasImage
+    ? {
+        url: messageImagePath(row.id),
+        width: imageWidth ?? 0,
+        height: imageHeight ?? 0,
+      }
+    : null,
 });
 
 type ProfileRowRaw = Omit<ProfileRow, "createdAt"> & { createdAt: Date };
@@ -294,13 +332,35 @@ export async function openDb(config: DbConfig): Promise<Db> {
       return rows.map((r) => ({ ...r, lastAt: isoOrNull(r.lastAt) }));
     },
 
-    async createMessage(senderId, recipientId, body) {
+    async createMessage(senderId, recipientId, body, image) {
       const { rows } = await sql.query<MessageRow>(
-        `INSERT INTO messages (sender_id, recipient_id, body) VALUES ($1, $2, $3)
+        `INSERT INTO messages
+           (sender_id, recipient_id, body, image_key, image_width, image_height)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING ${MESSAGE_COLUMNS}`,
-        [senderId, recipientId, body],
+        [
+          senderId,
+          recipientId,
+          body,
+          image?.key ?? null,
+          image?.width ?? null,
+          image?.height ?? null,
+        ],
       );
       return toMessage(rows[0]!);
+    },
+
+    async findMessageImage(messageId) {
+      const { rows } = await sql.query<{
+        key: string;
+        senderId: number;
+        recipientId: number;
+      }>(
+        `SELECT image_key AS key, sender_id AS "senderId", recipient_id AS "recipientId"
+         FROM messages WHERE id = $1 AND image_key IS NOT NULL`,
+        [messageId],
+      );
+      return rows[0];
     },
 
     async getMessages(a, b, { before, limit = 50 } = {}) {
@@ -326,7 +386,8 @@ export async function openDb(config: DbConfig): Promise<Db> {
            GROUP BY 1
          )
          SELECT ${USER_COLUMNS},
-                m.body AS "lastBody", m.sender_id AS "lastSenderId", m.created_at AS "lastAt",
+                m.body AS "lastBody", (m.image_key IS NOT NULL) AS "lastIsImage",
+                m.sender_id AS "lastSenderId", m.created_at AS "lastAt",
                 (SELECT COUNT(*)::int FROM messages
                   WHERE sender_id = u.id AND recipient_id = $1 AND read_at IS NULL) AS unread
          FROM convo c
