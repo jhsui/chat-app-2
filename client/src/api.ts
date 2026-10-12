@@ -4,7 +4,7 @@ import type {
   MessagesResponse,
   PeopleResponse,
   UsersResponse,
-} from '../../shared/types';
+} from "../../shared/types";
 
 /** An error from the API, carrying the HTTP status (e.g. 401 when signed out). */
 export class ApiError extends Error {
@@ -15,32 +15,47 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, { method = 'GET', body }: { method?: string; body?: unknown } = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  { method = "GET", body }: { method?: string; body?: unknown } = {},
+): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method,
-    credentials: 'include',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    credentials: "include",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError((data as { error?: string }).error || `Request failed (${res.status})`, res.status);
+    throw new ApiError(
+      (data as { error?: string }).error || `Request failed (${res.status})`,
+      res.status,
+    );
   }
   return data as T;
 }
 
 export const api = {
-  me: () => request<AuthResponse>('/auth/me'),
+  me: () => request<AuthResponse>("/auth/me"),
   login: (username: string, password: string) =>
-    request<AuthResponse>('/auth/login', { method: 'POST', body: { username, password } }),
+    request<AuthResponse>("/auth/login", {
+      method: "POST",
+      body: { username, password },
+    }),
   register: (username: string, password: string) =>
-    request<AuthResponse>('/auth/register', { method: 'POST', body: { username, password } }),
-  logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
-  searchUsers: (q: string) => request<UsersResponse>(`/users?q=${encodeURIComponent(q)}`),
-  people: () => request<PeopleResponse>('/people'),
-  conversations: () => request<ConversationsResponse>('/conversations'),
+    request<AuthResponse>("/auth/register", {
+      method: "POST",
+      body: { username, password },
+    }),
+  logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
+  searchUsers: (q: string) =>
+    request<UsersResponse>(`/users?q=${encodeURIComponent(q)}`),
+  people: () => request<PeopleResponse>("/people"),
+  conversations: () => request<ConversationsResponse>("/conversations"),
   messages: (userId: number, before?: number) =>
-    request<MessagesResponse>(`/messages/${userId}${before ? `?before=${before}` : ''}`),
+    request<MessagesResponse>(
+      `/messages/${userId}${before ? `?before=${before}` : ""}`,
+    ),
 };
 
 /** Turns anything thrown into a readable message. */

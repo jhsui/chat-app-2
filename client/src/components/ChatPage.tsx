@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { io, type Socket } from 'socket.io-client';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { io, type Socket } from "socket.io-client";
 import type {
   ClientToServerEvents,
   Conversation,
@@ -7,10 +7,11 @@ import type {
   Person,
   PublicUser,
   ServerToClientEvents,
-} from '../../../shared/types';
-import { ApiError, api } from '../api.ts';
-import Sidebar from './Sidebar.tsx';
-import ChatWindow from './ChatWindow.tsx';
+} from "../../../shared/types";
+import { ApiError, api } from "../api.ts";
+import Sidebar from "./Sidebar.tsx";
+import ChatWindow from "./ChatWindow.tsx";
+import { cx } from "../ui.ts";
 
 type ChatSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -35,7 +36,9 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
   const activeRef = useRef<PublicUser | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
   const peopleRef = useRef<Person[]>([]);
-  const typingTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const typingTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>(
+    {},
+  );
   const onLogoutRef = useRef(onLogout);
 
   useEffect(() => {
@@ -67,8 +70,10 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
   }, []);
 
   const markRead = useCallback((userId: number) => {
-    socketRef.current?.emit('messages:read', { from: userId });
-    setConversations((prev) => prev.map((c) => (c.id === userId ? { ...c, unread: 0 } : c)));
+    socketRef.current?.emit("messages:read", { from: userId });
+    setConversations((prev) =>
+      prev.map((c) => (c.id === userId ? { ...c, unread: 0 } : c)),
+    );
   }, []);
 
   const loadMessages = useCallback(
@@ -93,31 +98,38 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
     const socket: ChatSocket = io({ withCredentials: true });
     socketRef.current = socket;
 
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
-    socket.on('connect_error', (err) => {
+    socket.on("connect", () => setConnected(true));
+    socket.on("disconnect", () => setConnected(false));
+    socket.on("connect_error", (err) => {
       setConnected(false);
-      if (err.message === 'unauthorized') onLogoutRef.current();
+      if (err.message === "unauthorized") onLogoutRef.current();
     });
 
     // After a dropped connection, re-fetch anything we may have missed.
-    socket.io.on('reconnect', () => {
+    socket.io.on("reconnect", () => {
       void refreshConversations();
       void refreshPeople();
       if (activeRef.current) void loadMessages(activeRef.current);
     });
 
-    socket.on('message:new', (msg) => {
+    socket.on("message:new", (msg) => {
       const incoming = msg.senderId !== me.id;
       const otherId = incoming ? msg.senderId : msg.recipientId;
       const isActive = activeRef.current?.id === otherId;
 
       if (isActive) {
-        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
-        if (incoming && document.visibilityState === 'visible') socket.emit('messages:read', { from: otherId });
+        setMessages((prev) =>
+          prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
+        );
+        if (incoming && document.visibilityState === "visible")
+          socket.emit("messages:read", { from: otherId });
       }
       if (incoming) setTyping((t) => ({ ...t, [otherId]: false }));
-      setPeople((prev) => prev.map((p) => (p.id === otherId ? { ...p, lastAt: msg.createdAt } : p)));
+      setPeople((prev) =>
+        prev.map((p) =>
+          p.id === otherId ? { ...p, lastAt: msg.createdAt } : p,
+        ),
+      );
 
       if (!conversationsRef.current.some((c) => c.id === otherId)) {
         void refreshConversations(); // first message with someone new
@@ -137,33 +149,43 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
       });
     });
 
-    socket.on('messages:read', ({ readerId, senderId, upToId }) => {
+    socket.on("messages:read", ({ readerId, senderId, upToId }) => {
       if (senderId === me.id && activeRef.current?.id === readerId) {
         // The other person read our messages: show "Seen".
         const now = new Date().toISOString();
         setMessages((prev) =>
-          prev.map((m) => (m.senderId === me.id && m.id <= upToId && !m.readAt ? { ...m, readAt: now } : m)),
+          prev.map((m) =>
+            m.senderId === me.id && m.id <= upToId && !m.readAt
+              ? { ...m, readAt: now }
+              : m,
+          ),
         );
       }
       if (readerId === me.id) {
         // We read them in another tab.
-        setConversations((prev) => prev.map((c) => (c.id === senderId ? { ...c, unread: 0 } : c)));
+        setConversations((prev) =>
+          prev.map((c) => (c.id === senderId ? { ...c, unread: 0 } : c)),
+        );
       }
     });
 
-    socket.on('presence', ({ userId, online }) => {
+    socket.on("presence", ({ userId, online }) => {
       setOnline((o) => ({ ...o, [userId]: online }));
       if (!online) setTyping((t) => ({ ...t, [userId]: false }));
       // Someone we don't know yet (e.g. they just signed up): reload the People list.
-      if (online && !peopleRef.current.some((p) => p.id === userId)) void refreshPeople();
+      if (online && !peopleRef.current.some((p) => p.id === userId))
+        void refreshPeople();
     });
 
-    socket.on('typing', ({ from, typing }) => {
+    socket.on("typing", ({ from, typing }) => {
       clearTimeout(typingTimers.current[from]);
       setTyping((t) => ({ ...t, [from]: typing }));
       // Safety net in case the "stopped typing" event never arrives.
       if (typing) {
-        typingTimers.current[from] = setTimeout(() => setTyping((t) => ({ ...t, [from]: false })), 5000);
+        typingTimers.current[from] = setTimeout(
+          () => setTyping((t) => ({ ...t, [from]: false })),
+          5000,
+        );
       }
     });
 
@@ -180,10 +202,11 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
   // Mark messages read when the user comes back to the tab.
   useEffect(() => {
     function onVisible() {
-      if (document.visibilityState === 'visible' && activeRef.current) markRead(activeRef.current.id);
+      if (document.visibilityState === "visible" && activeRef.current)
+        markRead(activeRef.current.id);
     }
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [markRead]);
 
   // --- Actions ----------------------------------------------------------------
@@ -219,18 +242,22 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
 
   async function sendMessage(body: string): Promise<void> {
     const socket = socketRef.current;
-    if (!socket?.connected || !active) throw new Error("You're offline — message not sent");
+    if (!socket?.connected || !active)
+      throw new Error("You're offline — message not sent");
     let res;
     try {
-      res = await socket.timeout(5000).emitWithAck('message:send', { to: active.id, body });
+      res = await socket
+        .timeout(5000)
+        .emitWithAck("message:send", { to: active.id, body });
     } catch {
-      throw new Error('Message timed out — try again');
+      throw new Error("Message timed out — try again");
     }
     if (!res.ok) throw new Error(res.error);
   }
 
   function sendTyping(isTyping: boolean) {
-    if (active) socketRef.current?.emit('typing', { to: active.id, typing: isTyping });
+    if (active)
+      socketRef.current?.emit("typing", { to: active.id, typing: isTyping });
   }
 
   function handleLogout() {
@@ -238,10 +265,16 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
     onLogout();
   }
 
-  const isOnline = (user: { id: number; online?: boolean }) => online[user.id] ?? user.online ?? false;
+  const isOnline = (user: { id: number; online?: boolean }) =>
+    online[user.id] ?? user.online ?? false;
 
   return (
-    <div className={`chat-layout ${active ? 'has-active' : ''}`}>
+    <div
+      className={cx(
+        "mx-auto grid h-full max-w-300 grid-cols-[320px_1fr] border-x border-line bg-panel",
+        "max-md:grid-cols-1 max-md:border-0",
+      )}
+    >
       <Sidebar
         me={me}
         conversations={conversations}
@@ -270,11 +303,19 @@ export default function ChatPage({ me, onLogout }: ChatPageProps) {
           onBack={closeConversation}
         />
       ) : (
-        <section className="empty-chat">
+        <section className="grid place-items-center bg-panel-2 p-8 text-center max-md:hidden">
           <div>
-            <img src="/favicon.svg" alt="" width="56" height="56" />
-            <h2>Your messages</h2>
-            <p className="muted">Pick a conversation, or search for a username to start a new one.</p>
+            <img
+              src="/favicon.svg"
+              alt=""
+              width="56"
+              height="56"
+              className="mx-auto"
+            />
+            <h2 className="mt-4 mb-1.5 text-2xl font-bold">Your messages</h2>
+            <p className="text-muted">
+              Pick a conversation, or search for a username to start a new one.
+            </p>
           </div>
         </section>
       )}

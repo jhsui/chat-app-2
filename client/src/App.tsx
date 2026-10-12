@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import type { PublicUser } from '../../shared/types';
-import { api } from './api.ts';
-import AuthPage from './components/AuthPage.tsx';
-import ChatPage from './components/ChatPage.tsx';
+import { useEffect, useState } from "react";
+import type { PublicUser } from "../../shared/types";
+import { api } from "./api.ts";
+import AuthPage from "./components/AuthPage.tsx";
+import ChatPage from "./components/ChatPage.tsx";
 
 export default function App() {
   // undefined = still checking the session, null = signed out
@@ -20,7 +20,10 @@ export default function App() {
     setUser(null);
   }
 
-  if (user === undefined) return <div className="splash">Loading…</div>;
+  if (user === undefined)
+    return (
+      <div className="grid h-full place-items-center text-muted">Loading…</div>
+    );
   if (!user) return <AuthPage onAuthenticated={setUser} />;
   return <ChatPage key={user.id} me={user} onLogout={handleLogout} />;
 }

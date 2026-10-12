@@ -1,8 +1,17 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
-import type { Message, PublicUser } from '../../../shared/types';
-import { errorMessage } from '../api.ts';
-import { formatDay, formatTime, isSameDay, msBetween } from '../format.ts';
-import Avatar from './Avatar.tsx';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type SubmitEvent,
+  type KeyboardEvent,
+} from "react";
+import type { Message, PublicUser } from "../../../shared/types";
+import { errorMessage } from "../api.ts";
+import { formatDay, formatTime, isSameDay, msBetween } from "../format.ts";
+import { cx, ui } from "../ui.ts";
+import Avatar from "./Avatar.tsx";
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
@@ -41,12 +50,20 @@ export default function ChatWindow({
   onTyping,
   onBack,
 }: ChatWindowProps) {
-  const [draft, setDraft] = useState('');
-  const [error, setError] = useState('');
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const scrollState = useRef<ScrollState>({ firstId: null, lastId: null, height: 0, nearBottom: true });
-  const typingState = useRef<{ active: boolean; timer?: ReturnType<typeof setTimeout> }>({ active: false });
+  const scrollState = useRef<ScrollState>({
+    firstId: null,
+    lastId: null,
+    height: 0,
+    nearBottom: true,
+  });
+  const typingState = useRef<{
+    active: boolean;
+    timer?: ReturnType<typeof setTimeout>;
+  }>({ active: false });
 
   // Keep the view pinned to the newest message, but don't yank the user down
   // if they've scrolled up to read history. When older messages are added on
@@ -62,7 +79,8 @@ export default function ChatWindow({
       el.scrollTop += el.scrollHeight - s.height;
     } else if (lastId !== s.lastId) {
       const mine = messages.at(-1)?.senderId === me.id;
-      if (s.nearBottom || mine || s.lastId === null) el.scrollTop = el.scrollHeight;
+      if (s.nearBottom || mine || s.lastId === null)
+        el.scrollTop = el.scrollHeight;
     }
     scrollState.current = { ...s, firstId, lastId, height: el.scrollHeight };
   }, [messages, me.id]);
@@ -70,7 +88,8 @@ export default function ChatWindow({
   // Show the typing bubble without hiding the latest message.
   useLayoutEffect(() => {
     const el = listRef.current;
-    if (typing && el && scrollState.current.nearBottom) el.scrollTop = el.scrollHeight;
+    if (typing && el && scrollState.current.nearBottom)
+      el.scrollTop = el.scrollHeight;
   }, [typing]);
 
   useEffect(() => {
@@ -82,7 +101,8 @@ export default function ChatWindow({
   function handleScroll() {
     const el = listRef.current;
     if (!el) return;
-    scrollState.current.nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    scrollState.current.nearBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     scrollState.current.height = el.scrollHeight;
     if (el.scrollTop < 40 && hasMore && !loading) onLoadOlder();
   }
@@ -98,7 +118,7 @@ export default function ChatWindow({
 
   function handleChange(e: ChangeEvent<HTMLTextAreaElement>) {
     setDraft(e.target.value);
-    setError('');
+    setError("");
     const t = typingState.current;
     if (!t.active) {
       t.active = true;
@@ -108,12 +128,12 @@ export default function ChatWindow({
     t.timer = setTimeout(stopTyping, 2000);
   }
 
-  async function handleSubmit(e?: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e?: SubmitEvent<HTMLFormElement>) {
     e?.preventDefault();
     const body = draft.trim();
     if (!body) return;
     // Clear right away so fast typers can keep going; put the text back if it fails.
-    setDraft('');
+    setDraft("");
     stopTyping();
     inputRef.current?.focus();
     try {
@@ -125,7 +145,7 @@ export default function ChatWindow({
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void handleSubmit();
     }
@@ -135,27 +155,43 @@ export default function ChatWindow({
   const lastMineId = messages.findLast((m) => m.senderId === me.id)?.id;
 
   return (
-    <section className="chat">
-      <header className="chat-header">
-        <button className="btn-ghost back" onClick={onBack} aria-label="Back to conversations">
+    <section className="flex min-h-0 min-w-0 flex-col">
+      <header className={ui.header}>
+        <button
+          className={cx(ui.btnGhost, "text-xl md:hidden")}
+          onClick={onBack}
+          aria-label="Back to conversations"
+        >
           ←
         </button>
         <Avatar name={user.username} online={online} size={38} />
-        <div>
+        <div className={ui.nameBlock}>
           <strong>{user.username}</strong>
-          <span className="status">{typing ? 'typing…' : online ? 'Online' : 'Offline'}</span>
+          <span className={ui.status}>
+            {typing ? "typing…" : online ? "Online" : "Offline"}
+          </span>
         </div>
       </header>
 
-      <div className="messages" ref={listRef} onScroll={handleScroll}>
+      {/* The first child's auto top margin keeps short conversations pinned to the bottom. */}
+      <div
+        className="flex flex-1 flex-col overflow-y-auto bg-panel-2 px-5 py-4 *:first:mt-auto"
+        ref={listRef}
+        onScroll={handleScroll}
+      >
         {hasMore && (
-          <button className="btn-ghost load-older" onClick={onLoadOlder} disabled={loading}>
-            {loading ? 'Loading…' : 'Load older messages'}
+          <button
+            className={cx(ui.btnGhost, "mb-3 self-center text-sm")}
+            onClick={onLoadOlder}
+            disabled={loading}
+          >
+            {loading ? "Loading…" : "Load older messages"}
           </button>
         )}
         {!loading && messages.length === 0 && (
-          <p className="chat-intro muted">
-            This is the start of your conversation with <strong>{user.username}</strong>. Say hi!
+          <p className="px-4 py-8 text-center text-muted">
+            This is the start of your conversation with{" "}
+            <strong>{user.username}</strong>. Say hi!
           </p>
         )}
 
@@ -165,7 +201,9 @@ export default function ChatWindow({
           const mine = m.senderId === me.id;
           const newDay = !prev || !isSameDay(prev.createdAt, m.createdAt);
           const groupedWithPrev =
-            !newDay && prev?.senderId === m.senderId && msBetween(prev.createdAt, m.createdAt) < GROUP_GAP_MS;
+            !newDay &&
+            prev?.senderId === m.senderId &&
+            msBetween(prev.createdAt, m.createdAt) < GROUP_GAP_MS;
           const groupedWithNext =
             !!next &&
             next.senderId === m.senderId &&
@@ -175,18 +213,36 @@ export default function ChatWindow({
           return (
             <div key={m.id}>
               {newDay && (
-                <div className="day-divider">
-                  <span>{formatDay(m.createdAt)}</span>
+                <div className="mt-4 mb-2 flex justify-center">
+                  <span className="rounded-full border border-line bg-panel px-2.5 py-0.5 text-xs font-semibold text-muted">
+                    {formatDay(m.createdAt)}
+                  </span>
                 </div>
               )}
-              <div className={`msg ${mine ? 'mine' : 'theirs'} ${groupedWithPrev ? 'grouped' : ''}`}>
-                <div className="bubble" title={new Date(m.createdAt).toLocaleString()}>
+              <div
+                className={cx(
+                  "flex max-w-[min(75%,560px)] flex-col max-md:max-w-[85%]",
+                  groupedWithPrev ? "mt-0.5" : "mt-2.5",
+                  mine ? "items-end self-end" : "items-start self-start",
+                )}
+              >
+                <div
+                  className={cx(
+                    "rounded-[18px] px-3 py-2 whitespace-pre-wrap wrap-anywhere",
+                    mine
+                      ? "rounded-br-md bg-accent text-white"
+                      : "rounded-bl-md bg-bubble",
+                  )}
+                  title={new Date(m.createdAt).toLocaleString()}
+                >
                   {m.body}
                 </div>
                 {!groupedWithNext && (
-                  <div className="meta">
+                  <div className="mt-0.5 px-1 text-xs text-muted">
                     {formatTime(m.createdAt)}
-                    {mine && m.id === lastMineId && (m.readAt ? ' · Seen' : ' · Sent')}
+                    {mine &&
+                      m.id === lastMineId &&
+                      (m.readAt ? " · Seen" : " · Sent")}
                   </div>
                 )}
               </div>
@@ -195,19 +251,29 @@ export default function ChatWindow({
         })}
 
         {typing && (
-          <div className="msg theirs">
-            <div className="bubble typing-bubble" aria-label={`${user.username} is typing`}>
-              <span />
-              <span />
-              <span />
+          <div className="mt-2.5 flex self-start">
+            <div
+              className="flex gap-1 rounded-[18px] rounded-bl-md bg-bubble px-3.5 py-3"
+              aria-label={`${user.username} is typing`}
+            >
+              {["0s", "0.15s", "0.3s"].map((delay) => (
+                <span
+                  key={delay}
+                  className="size-1.75 animate-blink rounded-full bg-muted"
+                  style={{ animationDelay: delay }}
+                />
+              ))}
             </div>
           </div>
         )}
       </div>
 
-      <form className="composer" onSubmit={handleSubmit}>
+      <form
+        className="flex flex-wrap items-end gap-2.5 border-t border-line bg-panel px-4 py-3"
+        onSubmit={handleSubmit}
+      >
         {error && (
-          <p className="error composer-error" role="alert">
+          <p className={cx(ui.error, "basis-full")} role="alert">
             {error}
           </p>
         )}
@@ -221,8 +287,16 @@ export default function ChatWindow({
           placeholder={`Message ${user.username}`}
           maxLength={2000}
           aria-label={`Message ${user.username}`}
+          className={cx(
+            ui.fieldBase,
+            "field-sizing-content max-h-40 min-h-10.5 flex-1 resize-none rounded-[21px] px-4 py-2",
+          )}
         />
-        <button className="btn-primary send" type="submit" disabled={!draft.trim()}>
+        <button
+          className={cx(ui.primaryBase, "h-10.5 rounded-[21px] px-4")}
+          type="submit"
+          disabled={!draft.trim()}
+        >
           Send
         </button>
       </form>

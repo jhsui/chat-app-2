@@ -1,26 +1,29 @@
-import { useState, type FormEvent } from 'react';
-import type { PublicUser } from '../../../shared/types';
-import { api, errorMessage } from '../api.ts';
+import { useState, type SubmitEvent } from "react";
+import type { PublicUser } from "../../../shared/types";
+import { api, errorMessage } from "../api.ts";
+import { ui } from "../ui.ts";
 
 interface AuthPageProps {
   onAuthenticated: (user: PublicUser) => void;
 }
 
 export default function AuthPage({ onAuthenticated }: AuthPageProps) {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const isLogin = mode === 'login';
+  const isLogin = mode === "login";
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError('');
+    setError("");
     setBusy(true);
     try {
-      const { user } = isLogin ? await api.login(username, password) : await api.register(username, password);
+      const { user } = isLogin
+        ? await api.login(username, password)
+        : await api.register(username, password);
       onAuthenticated(user);
     } catch (err) {
       setError(errorMessage(err));
@@ -29,20 +32,29 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
   }
 
   function switchMode() {
-    setMode(isLogin ? 'register' : 'login');
-    setError('');
+    setMode(isLogin ? "register" : "login");
+    setError("");
   }
 
   return (
-    <main className="auth">
-      <form className="auth-card" onSubmit={handleSubmit}>
-        <div className="auth-logo" aria-hidden="true">
+    <main className="grid min-h-full place-items-center p-6">
+      <form
+        className="flex w-full max-w-95 flex-col gap-4 rounded-[20px] border border-line bg-panel p-8 shadow-[0_10px_40px_rgb(0_0_0/0.06)]"
+        onSubmit={handleSubmit}
+      >
+        <div aria-hidden="true">
           <img src="/favicon.svg" alt="" width="40" height="40" />
         </div>
-        <h1>{isLogin ? 'Welcome back' : 'Create your account'}</h1>
-        <p className="muted">{isLogin ? 'Sign in to keep chatting.' : 'Pick a username people can find you by.'}</p>
+        <h1 className="text-2xl leading-tight font-bold">
+          {isLogin ? "Welcome back" : "Create your account"}
+        </h1>
+        <p className="-mt-2 mb-1 text-muted">
+          {isLogin
+            ? "Sign in to keep chatting."
+            : "Pick a username people can find you by."}
+        </p>
 
-        <label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
           Username
           <input
             value={username}
@@ -54,35 +66,41 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
             maxLength={20}
             pattern="[a-zA-Z0-9_]+"
             title="Letters, numbers or underscores"
+            className={ui.input}
           />
         </label>
-        <label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
           Password
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoComplete={isLogin ? 'current-password' : 'new-password'}
+            autoComplete={isLogin ? "current-password" : "new-password"}
             required
             minLength={6}
             maxLength={72}
+            className={ui.input}
           />
         </label>
 
         {error && (
-          <p className="error" role="alert">
+          <p className={ui.error} role="alert">
             {error}
           </p>
         )}
 
-        <button className="btn-primary" type="submit" disabled={busy}>
-          {busy ? 'Please wait…' : isLogin ? 'Sign in' : 'Sign up'}
+        <button className={ui.btnPrimary} type="submit" disabled={busy}>
+          {busy ? "Please wait…" : isLogin ? "Sign in" : "Sign up"}
         </button>
 
-        <p className="muted switch">
-          {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}
-          <button type="button" className="link" onClick={switchMode}>
-            {isLogin ? 'Sign up' : 'Sign in'}
+        <p className="text-center text-sm text-muted">
+          {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
+          <button
+            type="button"
+            className="font-semibold text-accent"
+            onClick={switchMode}
+          >
+            {isLogin ? "Sign up" : "Sign in"}
           </button>
         </p>
       </form>

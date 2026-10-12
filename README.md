@@ -2,7 +2,7 @@
 
 A real-time chat web app with user accounts and private 1:1 direct messages.
 
-**Stack:** TypeScript everywhere · React 19 + Vite · Node.js + Express 5 · Socket.IO · SQLite (better-sqlite3) · bcrypt + JWT (httpOnly cookie)
+**Stack:** TypeScript everywhere · React 19 + Vite · Tailwind CSS v4 · Node.js + Express 5 · Socket.IO · SQLite (better-sqlite3) · bcrypt + JWT (httpOnly cookie)
 
 ## Features
 
@@ -31,19 +31,27 @@ Optional: copy `server/.env.example` to `server/.env` to set your own `JWT_SECRE
 
 ## Scripts (run from the project root)
 
-| Command             | What it does                                                          |
-| ------------------- | --------------------------------------------------------------------- |
-| `npm run dev`       | Server (runs the `.ts` files directly with tsx, restarts on change) + Vite dev server |
-| `npm run typecheck` | Type-checks the server, tests and client with `tsc`                   |
-| `npm test`          | Server tests: auth, search, live messaging, read receipts, paging     |
+| Command             | What it does                                                                                 |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `npm run dev`       | Server (runs the `.ts` files directly with tsx, restarts on change) + Vite dev server        |
+| `npm run typecheck` | Type-checks the server, tests and client with `tsc`                                          |
+| `npm test`          | Server tests: auth, search, live messaging, read receipts, paging                            |
 | `npm run build`     | Type-checks and builds the client into `client/dist`, compiles the server into `server/dist` |
-| `npm start`         | Runs the compiled server (`server/dist`); serves `client/dist` too    |
+| `npm start`         | Runs the compiled server (`server/dist`); serves `client/dist` too                           |
 
 To run it like production on one port: `npm run build && JWT_SECRET=something-long npm start`, then open http://localhost:3001.
 
+## Styling (Tailwind CSS v4)
+
+- Styles are Tailwind utility classes written directly in the JSX. Tailwind runs as a Vite plugin (`@tailwindcss/vite`), so there's no separate config file or PostCSS setup.
+- **Theme tokens** live in `client/src/styles.css`: colors are CSS variables on `:root`, swapped for dark mode by `@media (prefers-color-scheme: dark)`, and exposed to Tailwind through `@theme`. That gives custom utilities like `bg-panel`, `text-muted`, `border-line`, `bg-accent`, `bg-bubble`, so components don't need `dark:` variants for colors. To change the accent color, edit `--accent` in one place.
+- `md` is set to 720px: below it (`max-md:`), the app shows one pane at a time.
+- **Shared classes** used in several components (buttons, inputs, headers) are strings in `client/src/ui.ts`; `cx()` joins class names conditionally.
+- Tip: the official "Tailwind CSS IntelliSense" VS Code extension gives autocomplete and hover previews for class names.
+
 ## TypeScript setup
 
-- **Shared types** live in `shared/types.d.ts`: the data shapes (`Message`, `Conversation`, …), every REST response, and the Socket.IO events. Both sides `import type` from it, so if you change an event's payload, `npm run typecheck` shows every place on the server *and* client that needs updating.
+- **Shared types** live in `shared/types.d.ts`: the data shapes (`Message`, `Conversation`, …), every REST response, and the Socket.IO events. Both sides `import type` from it, so if you change an event's payload, `npm run typecheck` shows every place on the server _and_ client that needs updating.
 - **Typed sockets:** the server is a `Server<ClientToServerEvents, ServerToClientEvents>` and the client a `Socket<ServerToClientEvents, ClientToServerEvents>`, so `socket.emit('message:send', …)` and every `socket.on(...)` handler are checked.
 - **Server:** in development `tsx` runs the `.ts` files directly (no build step). For production, `tsc` compiles `server/src` to `server/dist`. `tsconfig.json` covers src + tests for type-checking; `tsconfig.build.json` is the compile config.
 - **Client:** Vite compiles the `.tsx` files; `tsc --noEmit` only type-checks (run as part of `npm run build`).
@@ -91,17 +99,18 @@ chat-app/
         ├── App.tsx          session check → AuthPage or ChatPage
         ├── api.ts           typed fetch wrapper
         ├── components/      AuthPage, ChatPage (socket + state), Sidebar, ChatWindow, Avatar
-        └── styles.css
+        ├── ui.ts           shared Tailwind class strings + cx() helper
+        └── styles.css      Tailwind entry: theme tokens (light/dark), keyframes
 ```
 
 ## Socket events
 
-| Client → server  | Payload          | Server → client  | Payload                              |
-| ---------------- | ---------------- | ---------------- | ------------------------------------ |
-| `message:send`   | `{ to, body }` + ack | `message:new`  | `Message`                            |
-| `typing`         | `{ to, typing }` | `typing`         | `{ from, typing }`                   |
-| `messages:read`  | `{ from }`       | `messages:read`  | `{ readerId, senderId, upToId }`     |
-|                  |                  | `presence`       | `{ userId, online }`                 |
+| Client → server | Payload              | Server → client | Payload                          |
+| --------------- | -------------------- | --------------- | -------------------------------- |
+| `message:send`  | `{ to, body }` + ack | `message:new`   | `Message`                        |
+| `typing`        | `{ to, typing }`     | `typing`        | `{ from, typing }`               |
+| `messages:read` | `{ from }`           | `messages:read` | `{ readerId, senderId, upToId }` |
+|                 |                      | `presence`      | `{ userId, online }`             |
 
 ## Ideas for next steps
 

@@ -66,17 +66,25 @@ export interface ErrorResponse {
 
 // ---- Socket.IO events --------------------------------------------------------
 
-export type SendMessageAck = { ok: true; message: Message } | { ok?: false; error: string };
+export type SendMessageAck =
+  { ok: true; message: Message } | { ok?: false; error: string };
 
 export interface ClientToServerEvents {
-  'message:send': (payload: { to: number; body: string }, ack: (res: SendMessageAck) => void) => void;
+  "message:send": (
+    payload: { to: number; body: string },
+    ack: (res: SendMessageAck) => void,
+  ) => void;
   typing: (payload: { to: number; typing: boolean }) => void;
-  'messages:read': (payload: { from: number }) => void;
+  "messages:read": (payload: { from: number }) => void;
 }
 
 export interface ServerToClientEvents {
-  'message:new': (message: Message) => void;
+  "message:new": (message: Message) => void;
   typing: (payload: { from: number; typing: boolean }) => void;
-  'messages:read': (payload: { readerId: number; senderId: number; upToId: number }) => void;
+  "messages:read": (payload: {
+    readerId: number;
+    senderId: number;
+    upToId: number;
+  }) => void;
   presence: (payload: { userId: number; online: boolean }) => void;
 }
