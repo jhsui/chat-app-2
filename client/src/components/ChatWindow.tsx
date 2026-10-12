@@ -23,8 +23,29 @@ import Avatar from "./Avatar.tsx";
 import ImageViewer from "./ImageViewer.tsx";
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
+/** Size of the avatar beside each run of messages, in pixels. */
+const MESSAGE_AVATAR = 28;
 /** The largest a picture is shown inside the chat, in pixels. */
 const MAX_THUMB = { width: 280, height: 320 };
+
+/**
+ * The sender's avatar beside the first message of a run, lined up with the
+ * bubble's first line. The rest of the run gets an empty space of the same
+ * width (`show` false), so the bubbles stay in a column.
+ */
+function MessageAvatar({ user, show }: { user: PublicUser; show: boolean }) {
+  return (
+    <div className="mt-1 flex flex-none" style={{ width: MESSAGE_AVATAR }}>
+      {show && (
+        <Avatar
+          name={nameOf(user)}
+          src={user.avatarUrl}
+          size={MESSAGE_AVATAR}
+        />
+      )}
+    </div>
+  );
+}
 
 /**
  * A picture in the chat. Its box is sized from the stored dimensions, so the
@@ -338,47 +359,64 @@ export default function ChatWindow({
                   </span>
                 </div>
               )}
+              {/* Avatar on the outside, then the bubble: mine on the right, theirs on the left. */}
               <div
                 className={cx(
-                  "flex max-w-[min(75%,560px)] flex-col max-md:max-w-[85%]",
+                  "flex items-start gap-2",
                   groupedWithPrev ? "mt-0.5" : "mt-2.5",
-                  mine ? "items-end self-end" : "items-start self-start",
+                  mine && "flex-row-reverse",
                 )}
               >
-                {m.image ? (
-                  <ImageBubble
-                    image={m.image}
-                    title={new Date(m.createdAt).toLocaleString()}
-                    onOpen={() => setViewing(m.image)}
-                  />
-                ) : (
-                  <div
-                    className={cx(
-                      "rounded-[18px] px-3 py-2 whitespace-pre-wrap wrap-anywhere",
-                      mine
-                        ? "rounded-br-md bg-accent text-white"
-                        : "rounded-bl-md bg-bubble",
-                    )}
-                    title={new Date(m.createdAt).toLocaleString()}
-                  >
-                    {m.body}
-                  </div>
-                )}
-                {!groupedWithNext && (
-                  <div className="mt-0.5 px-1 text-xs text-muted">
-                    {formatTime(m.createdAt)}
-                    {mine &&
-                      m.id === lastMineId &&
-                      (m.readAt ? " · Seen" : " · Sent")}
-                  </div>
-                )}
+                <MessageAvatar
+                  user={mine ? me : user}
+                  show={!groupedWithPrev}
+                />
+                <div
+                  className={cx(
+                    "flex max-w-[min(75%,560px)] min-w-0 flex-col max-md:max-w-[85%]",
+                    mine ? "items-end" : "items-start",
+                  )}
+                >
+                  {m.image ? (
+                    <ImageBubble
+                      image={m.image}
+                      title={new Date(m.createdAt).toLocaleString()}
+                      onOpen={() => setViewing(m.image)}
+                    />
+                  ) : (
+                    <div
+                      className={cx(
+                        "rounded-[18px] px-3 py-2 whitespace-pre-wrap wrap-anywhere",
+                        mine
+                          ? "rounded-br-md bg-accent text-white"
+                          : "rounded-bl-md bg-bubble",
+                      )}
+                      title={new Date(m.createdAt).toLocaleString()}
+                    >
+                      {m.body}
+                    </div>
+                  )}
+                  {!groupedWithNext && (
+                    <div className="mt-0.5 px-1 text-xs text-muted">
+                      {formatTime(m.createdAt)}
+                      {mine &&
+                        m.id === lastMineId &&
+                        (m.readAt ? " · Seen" : " · Sent")}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
         })}
 
         {typing && (
-          <div className="mt-2.5 flex self-start">
+          <div className="mt-2.5 flex items-center gap-2 self-start">
+            <Avatar
+              name={nameOf(user)}
+              src={user.avatarUrl}
+              size={MESSAGE_AVATAR}
+            />
             <div
               className="flex gap-1 rounded-[18px] rounded-bl-md bg-bubble px-3.5 py-3"
               aria-label={`${nameOf(user)} is typing`}
