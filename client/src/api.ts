@@ -65,10 +65,14 @@ export const api = {
       `/messages/${userId}${before ? `?before=${before}` : ""}`,
     ),
   /** Sends a picture (already resized by toChatImage) as a message. */
-  sendImage: async (userId: number, { blob, width, height }: ChatImage) =>
+  sendImage: async (
+    userId: number,
+    { blob, width, height }: ChatImage,
+    replyTo?: number,
+  ) =>
     parse<MessageResponse>(
       await fetch(
-        `/api/messages/${userId}/image?width=${width}&height=${height}`,
+        `/api/messages/${userId}/image?width=${width}&height=${height}${replyTo ? `&replyTo=${replyTo}` : ""}`,
         {
           method: "POST",
           credentials: "include",

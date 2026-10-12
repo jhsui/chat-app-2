@@ -601,6 +601,87 @@ test("image messages: upload, live delivery, history and validation", async () =
   bSock.disconnect();
 });
 
+test("replies quote an earlier message from the same conversation only", async () => {
+  const bobId: number = (await bob.request("GET", "/api/auth/me")).body.user.id;
+  const aliceId: number = (await alice.request("GET", "/api/auth/me")).body.user
+    .id;
+  const aSock = await socketFor(alice);
+  const bSock = await socketFor(bob);
+  const send = async (
+    sock: ClientSocket,
+    payload: { to: number; body: string; replyTo?: number },
+  ) => {
+    const ack = await sock.emitWithAck("message:send", payload);
+    assert.ok(ack.ok);
+    return ack.message;
+  };
+
+  // Bob asks; Alice replies to that message. Both get the quote with the reply.
+  const question = await send(bSock, {
+    to: aliceId,
+    body: "lunch at 12? " + "x".repeat(300),
+  });
+  assert.equal(question.replyTo, null);
+  const bobGets = once(bSock, "message:new");
+  const answer = await send(aSock, {
+    to: bobId,
+    body: "yes!",
+    replyTo: question.id,
+  });
+  assert.deepEqual(answer.replyTo, {
+    id: question.id,
+    senderId: bobId,
+    body: question.body.slice(0, 200),
+    imageUrl: null,
+  });
+  assert.deepEqual(await bobGets, answer);
+
+  // The quote comes back with the history too.
+  const history = (await bob.request("GET", `/api/messages/${aliceId}`)).body;
+  assert.deepEqual(history.messages.at(-1), answer);
+
+  // Replying to a picture, and replying with a picture.
+  const picture = history.messages.find(
+    (m: { image: unknown }) => m.image !== null,
+  );
+  const toPicture = await send(bSock, {
+    to: aliceId,
+    body: "nice one",
+    replyTo: picture.id,
+  });
+  assert.equal(toPicture.replyTo?.body, "");
+  assert.equal(toPicture.replyTo?.imageUrl, `/api/images/${picture.id}`);
+  const r = await alice.upload(
+    `/api/messages/${bobId}/image?width=10&height=10&replyTo=${question.id}`,
+    WEBP,
+    "image/webp",
+    "POST",
+  );
+  assert.equal(r.status, 201);
+  assert.equal(r.body.message.replyTo.id, question.id);
+
+  // A message from another conversation can't be quoted (that would leak it):
+  // the message is still sent, just not as a reply. Same for ids that don't exist.
+  const carol = client();
+  await carol.request("POST", "/api/auth/login", {
+    username: "carol",
+    password: "secret1",
+  });
+  const cSock = await socketFor(carol);
+  const secret = await send(cSock, {
+    to: bobId,
+    body: "between carol and bob",
+  });
+  for (const replyTo of [secret.id, 99_999_999_999, -1]) {
+    const sent = await send(aSock, { to: bobId, body: "hmm", replyTo });
+    assert.equal(sent.replyTo, null);
+  }
+
+  aSock.disconnect();
+  bSock.disconnect();
+  cSock.disconnect();
+});
+
 test("uploads explain when storage isn't configured", async () => {
   const bare = await createServer({
     db: { pgliteDir: "memory://" },

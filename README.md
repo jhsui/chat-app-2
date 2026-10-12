@@ -14,6 +14,7 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 - **Images:** attach a picture with the image button or paste one from the clipboard; it's shrunk in the browser, stored in a private Supabase Storage bucket that only the two people in the conversation can load from, and opens full-size when clicked
 - Conversation list sorted by latest message, with unread badges
 - Online / offline status, typing indicator, and "Sent / Seen" read receipts
+- **Replies:** hover a message (or tap the arrow on a phone) to reply to it; the reply shows a quote of the original, and clicking the quote jumps to it
 - Emoji picker in the message box, with search, categories and skin tones ([emoji-picker-react](https://github.com/ealush/emoji-picker-react), downloaded the first time it's opened)
 - Per-chat drafts: unsent text stays with its chat when you switch, with a "Draft: …" preview in the sidebar (kept until you reload)
 - Message history with "load older" pagination
@@ -167,13 +168,13 @@ chat-app/
 
 ## Socket events
 
-| Client → server | Payload              | Server → client   | Payload                          |
-| --------------- | -------------------- | ----------------- | -------------------------------- |
-| `message:send`  | `{ to, body }` + ack | `message:new`     | `Message`                        |
-| `typing`        | `{ to, typing }`     | `typing`          | `{ from, typing }`               |
-| `messages:read` | `{ from }`           | `messages:read`   | `{ readerId, senderId, upToId }` |
-|                 |                      | `presence`        | `{ userId, online }`             |
-|                 |                      | `profile:updated` | `PublicUser` (new name/avatar)   |
+| Client → server | Payload                        | Server → client   | Payload                          |
+| --------------- | ------------------------------ | ----------------- | -------------------------------- |
+| `message:send`  | `{ to, body, replyTo? }` + ack | `message:new`     | `Message`                        |
+| `typing`        | `{ to, typing }`               | `typing`          | `{ from, typing }`               |
+| `messages:read` | `{ from }`                     | `messages:read`   | `{ readerId, senderId, upToId }` |
+|                 |                                | `presence`        | `{ userId, online }`             |
+|                 |                                | `profile:updated` | `PublicUser` (new name/avatar)   |
 
 Image messages are sent with `POST /api/messages/:userId/image?width=…&height=…` (the image bytes as the body, ≤ 1 MB) and arrive as a `message:new` whose `image` is `{ url, width, height }`. The `url` is `GET /api/images/:messageId`, which serves the file to the sender and recipient only.
 

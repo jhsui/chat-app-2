@@ -102,7 +102,7 @@ export function chatRoutes(
   );
 
   // Send a picture: POST /api/messages/42/image?width=800&height=600 with the
-  // image bytes as the body. Text messages go over the socket instead; images
+  // image bytes as the body. Add &replyTo=123 to send it as a reply. Text messages go over the socket instead; images
   // use HTTP because they're big and need a size limit and upload errors.
   router.post(
     "/messages/:userId/image",
@@ -155,10 +155,10 @@ export function chatRoutes(
 
       let message: Message;
       try {
+        const replyToId = Number(req.query.replyTo);
         message = await db.createMessage(me.id, to, "", {
-          key,
-          width,
-          height,
+          image: { key, width, height },
+          replyToId: isValidId(replyToId) ? replyToId : undefined,
         });
       } catch (err) {
         // Don't leave a file behind that no message points to.

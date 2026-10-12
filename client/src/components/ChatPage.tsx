@@ -61,6 +61,8 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
   // what you typed. A ref: typing shouldn't re-render the whole page.
   const draftsRef = useRef(new Map<number, string>());
   const [, redrawDrafts] = useReducer((n: number) => n + 1, 0);
+  // The message being replied to in each chat, kept the same way.
+  const replyDraftsRef = useRef(new Map<number, Message>());
   const onLogoutRef = useRef(onLogout);
   const onMeChangeRef = useRef(onMeChange);
 
@@ -283,7 +285,7 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
     }
   }
 
-  async function sendMessage(body: string): Promise<void> {
+  async function sendMessage(body: string, replyTo?: number): Promise<void> {
     const socket = socketRef.current;
     if (!socket?.connected || !active)
       throw new Error("You're offline — message not sent");
@@ -291,7 +293,7 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
     try {
       res = await socket
         .timeout(5000)
-        .emitWithAck("message:send", { to: active.id, body });
+        .emitWithAck("message:send", { to: active.id, body, replyTo });
     } catch {
       throw new Error("Message timed out — try again");
     }
@@ -300,10 +302,10 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
 
   // Images are uploaded over HTTP; the server then announces the new message
   // over the socket like any other, which is what adds it to the chat.
-  async function sendImage(image: ChatImage): Promise<void> {
+  async function sendImage(image: ChatImage, replyTo?: number): Promise<void> {
     if (!socketRef.current?.connected || !active)
       throw new Error("You're offline — image not sent");
-    await api.sendImage(active.id, image);
+    await api.sendImage(active.id, image, replyTo);
   }
 
   function saveDraft(userId: number, text: string) {
@@ -364,6 +366,11 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
           onSendImage={sendImage}
           initialDraft={draftsRef.current.get(active.id) ?? ""}
           onDraftChange={(text) => saveDraft(active.id, text)}
+          initialReplyTo={replyDraftsRef.current.get(active.id) ?? null}
+          onReplyChange={(message) => {
+            if (message) replyDraftsRef.current.set(active.id, message);
+            else replyDraftsRef.current.delete(active.id);
+          }}
           onTyping={sendTyping}
           onBack={closeConversation}
           onShowProfile={() => setProfileId(active.id)}

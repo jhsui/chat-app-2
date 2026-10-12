@@ -51,6 +51,10 @@ const SCHEMA = `
   ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_key TEXT;
   ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_width INTEGER;
   ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_height INTEGER;
+
+  -- Replies: the earlier message this one quotes.
+  ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER
+    REFERENCES messages(id) ON DELETE SET NULL;
 `;
 
 /** The public user fields, for a query where the users table is aliased as "u". */
@@ -58,11 +62,19 @@ const USER_COLUMNS = `
   u.id, u.username, u.display_name AS "displayName", u.avatar_url AS "avatarUrl"
 `;
 
+/**
+ * A message's fields, for a query where the message is "m" and the message it
+ * replies to is joined as "r" (see REPLY_JOIN). Only a preview of the quoted
+ * message is read: its text is cut off after 200 characters.
+ */
 const MESSAGE_COLUMNS = `
-  id, sender_id AS "senderId", recipient_id AS "recipientId", body,
-  created_at AS "createdAt", read_at AS "readAt",
-  (image_key IS NOT NULL) AS "hasImage", image_width AS "imageWidth", image_height AS "imageHeight"
+  m.id, m.sender_id AS "senderId", m.recipient_id AS "recipientId", m.body,
+  m.created_at AS "createdAt", m.read_at AS "readAt",
+  (m.image_key IS NOT NULL) AS "hasImage", m.image_width AS "imageWidth", m.image_height AS "imageHeight",
+  r.id AS "replyId", r.sender_id AS "replySenderId", left(r.body, 200) AS "replyBody",
+  (r.image_key IS NOT NULL) AS "replyHasImage"
 `;
+const REPLY_JOIN = `LEFT JOIN messages r ON r.id = m.reply_to_id`;
 
 /** A user's profile as stored, before online status is added. */
 export type ProfileRow = Omit<Profile, "online">;
@@ -104,12 +116,19 @@ export interface Db {
   searchUsers(me: number, query: string): Promise<PublicUser[]>;
   /** Every user except `me`, with the time of your latest message together (or null). */
   listPeople(me: number): Promise<(PublicUser & { lastAt: string | null })[]>;
-  /** Pass `image` (already uploaded to storage under `key`) for an image message. */
+  /**
+   * Pass `image` (already uploaded to storage under `key`) for an image
+   * message. `replyToId` is the message being replied to; it's ignored unless
+   * that message is in the same conversation.
+   */
   createMessage(
     senderId: number,
     recipientId: number,
     body: string,
-    image?: { key: string; width: number; height: number },
+    options?: {
+      image?: { key: string; width: number; height: number };
+      replyToId?: number;
+    },
   ): Promise<Message>;
   /** Where a message's picture is stored and who may see it; undefined if it has none. */
   findMessageImage(
@@ -205,17 +224,29 @@ const iso = (value: Date | string) => new Date(value).toISOString();
 const isoOrNull = (value: Date | string | null) =>
   value === null ? null : iso(value);
 
-type MessageRow = Omit<Message, "createdAt" | "readAt" | "image"> & {
+type MessageRow = Omit<
+  Message,
+  "createdAt" | "readAt" | "image" | "replyTo"
+> & {
   createdAt: Date;
   readAt: Date | null;
   hasImage: boolean;
   imageWidth: number | null;
   imageHeight: number | null;
+  // All null when the message isn't a reply.
+  replyId: number | null;
+  replySenderId: number | null;
+  replyBody: string | null;
+  replyHasImage: boolean | null;
 };
 const toMessage = ({
   hasImage,
   imageWidth,
   imageHeight,
+  replyId,
+  replySenderId,
+  replyBody,
+  replyHasImage,
   ...row
 }: MessageRow): Message => ({
   ...row,
@@ -228,6 +259,15 @@ const toMessage = ({
         height: imageHeight ?? 0,
       }
     : null,
+  replyTo:
+    replyId === null
+      ? null
+      : {
+          id: replyId,
+          senderId: replySenderId ?? 0,
+          body: replyBody ?? "",
+          imageUrl: replyHasImage ? messageImagePath(replyId) : null,
+        },
 });
 
 type ProfileRowRaw = Omit<ProfileRow, "createdAt"> & { createdAt: Date };
@@ -332,12 +372,27 @@ export async function openDb(config: DbConfig): Promise<Db> {
       return rows.map((r) => ({ ...r, lastAt: isoOrNull(r.lastAt) }));
     },
 
-    async createMessage(senderId, recipientId, body, image) {
+    async createMessage(
+      senderId,
+      recipientId,
+      body,
+      { image, replyToId } = {},
+    ) {
+      // The sub-select only finds the replied-to message if it's between these
+      // same two people. Otherwise reply_to_id stays null, so a reply can never
+      // quote (and so reveal) a message from someone else's conversation.
       const { rows } = await sql.query<MessageRow>(
-        `INSERT INTO messages
-           (sender_id, recipient_id, body, image_key, image_width, image_height)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING ${MESSAGE_COLUMNS}`,
+        `WITH m AS (
+           INSERT INTO messages
+             (sender_id, recipient_id, body, image_key, image_width, image_height, reply_to_id)
+           VALUES ($1, $2, $3, $4, $5, $6, (
+             SELECT id FROM messages
+             WHERE id = $7::int
+               AND ((sender_id = $1 AND recipient_id = $2) OR (sender_id = $2 AND recipient_id = $1))
+           ))
+           RETURNING *
+         )
+         SELECT ${MESSAGE_COLUMNS} FROM m ${REPLY_JOIN}`,
         [
           senderId,
           recipientId,
@@ -345,6 +400,7 @@ export async function openDb(config: DbConfig): Promise<Db> {
           image?.key ?? null,
           image?.width ?? null,
           image?.height ?? null,
+          replyToId ?? null,
         ],
       );
       return toMessage(rows[0]!);
@@ -365,10 +421,10 @@ export async function openDb(config: DbConfig): Promise<Db> {
 
     async getMessages(a, b, { before, limit = 50 } = {}) {
       const { rows } = await sql.query<MessageRow>(
-        `SELECT ${MESSAGE_COLUMNS} FROM messages
-         WHERE ((sender_id = $1 AND recipient_id = $2) OR (sender_id = $2 AND recipient_id = $1))
-           AND ($3::int IS NULL OR id < $3)
-         ORDER BY id DESC LIMIT $4`,
+        `SELECT ${MESSAGE_COLUMNS} FROM messages m ${REPLY_JOIN}
+         WHERE ((m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1))
+           AND ($3::int IS NULL OR m.id < $3)
+         ORDER BY m.id DESC LIMIT $4`,
         [a, b, before ?? null, limit],
       );
       return rows.map(toMessage).reverse();

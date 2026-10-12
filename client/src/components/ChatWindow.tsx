@@ -10,7 +10,12 @@ import {
   type SubmitEvent,
   type KeyboardEvent,
 } from "react";
-import type { Message, MessageImage, PublicUser } from "../../../shared/types";
+import type {
+  Message,
+  MessageImage,
+  PublicUser,
+  ReplyPreview,
+} from "../../../shared/types";
 import { errorMessage } from "../api.ts";
 import {
   formatDay,
@@ -94,6 +99,48 @@ function ImageBubble({
   );
 }
 
+/** The quoted message at the top of a reply. Clicking it jumps to the original. */
+function ReplyQuote({
+  reply,
+  name,
+  onAccent,
+  onJump,
+}: {
+  reply: ReplyPreview;
+  /** Who wrote the quoted message. */
+  name: string;
+  /** True inside one of my own (accent-colored) bubbles. */
+  onAccent: boolean;
+  onJump: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onJump}
+      className={cx(
+        "flex w-full items-center gap-2 rounded-lg border-l-3 px-2 py-1 text-left text-sm whitespace-normal",
+        onAccent
+          ? "border-white/70 bg-white/15"
+          : "border-accent bg-black/5 dark:bg-white/10",
+      )}
+    >
+      {reply.imageUrl && (
+        <img
+          src={reply.imageUrl}
+          alt=""
+          className="size-9 flex-none rounded-md object-cover"
+        />
+      )}
+      <span className="min-w-0">
+        <span className="block font-semibold">{name}</span>
+        <span className="line-clamp-2 opacity-80">
+          {reply.imageUrl ? "Photo" : reply.body}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 interface ChatWindowProps {
   me: PublicUser;
   user: PublicUser;
@@ -104,13 +151,17 @@ interface ChatWindowProps {
   loading: boolean;
   onLoadOlder: () => void;
   /** Resolves when the server accepts the message; rejects with a readable error. */
-  onSend: (body: string) => Promise<void>;
+  onSend: (body: string, replyTo?: number) => Promise<void>;
   /** Same, for a picture. */
-  onSendImage: (image: ChatImage) => Promise<void>;
+  onSendImage: (image: ChatImage, replyTo?: number) => Promise<void>;
   /** Text typed here earlier and not sent, to start the box with. */
   initialDraft: string;
   /** Called with the unsent text whenever it changes, so it can be kept for next time. */
   onDraftChange: (text: string) => void;
+  /** The message that was being replied to here earlier, if the reply wasn't sent. */
+  initialReplyTo: Message | null;
+  /** Called when a reply is started, sent or cancelled, so it can be kept the same way. */
+  onReplyChange: (message: Message | null) => void;
   onTyping: (typing: boolean) => void;
   onBack: () => void;
   /** Opens this person's profile. */
@@ -137,6 +188,8 @@ export default function ChatWindow({
   onSendImage,
   initialDraft,
   onDraftChange,
+  initialReplyTo,
+  onReplyChange,
   onTyping,
   onBack,
   onShowProfile,
@@ -144,6 +197,10 @@ export default function ChatWindow({
   const [draft, setDraft] = useState(initialDraft);
   // The latest draft, readable after an await (state in a closure would be stale).
   const draftRef = useRef(initialDraft);
+  // The message being replied to, shown above the text box.
+  const [replyingTo, setReplyingTo] = useState(initialReplyTo);
+  const replyRef = useRef(initialReplyTo);
+  const [highlightId, setHighlightId] = useState<number | null>(null); // message just jumped to
   const [error, setError] = useState("");
   // The picture waiting to be sent, shown above the text box.
   const [attachment, setAttachment] = useState<{
@@ -237,6 +294,29 @@ export default function ChatWindow({
     }
   }
 
+  /** Starts or cancels (null) a reply, and reports it like the draft. */
+  function updateReply(message: Message | null) {
+    replyRef.current = message;
+    setReplyingTo(message);
+    onReplyChange(message);
+  }
+
+  /** Scrolls to a quoted message and highlights it briefly, if it's among the loaded messages. */
+  function jumpTo(messageId: number) {
+    const el = listRef.current?.querySelector(
+      `[data-message-id="${messageId}"]`,
+    );
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    setHighlightId(messageId);
+  }
+
+  useEffect(() => {
+    if (highlightId === null) return;
+    const timer = setTimeout(() => setHighlightId(null), 1500);
+    return () => clearTimeout(timer);
+  }, [highlightId]);
+
   /** Tells the other person we're typing, until 2 seconds pass without a change. */
   function noteTyping() {
     const t = typingState.current;
@@ -327,8 +407,11 @@ export default function ChatWindow({
     const body = draft.trim();
     const pending = attachment;
     if ((!body && !pending) || sendingImage) return;
+    // The reply goes with the first message sent; null once that's done.
+    let reply = replyingTo;
     // Clear right away so fast typers can keep going; put the text back if it fails.
     updateDraft("");
+    updateReply(null);
     stopTyping();
     setEmojiOpen(false);
     inputRef.current?.focus();
@@ -336,16 +419,18 @@ export default function ChatWindow({
       // A picture and text go out as two messages, picture first.
       if (pending) {
         setSendingImage(true);
-        await onSendImage(pending.image);
+        await onSendImage(pending.image, reply?.id);
+        reply = null;
         // Unless it was swapped for another picture while this one was uploading.
         setAttachment((current) => (current === pending ? null : current));
       }
-      if (body) await onSend(body);
+      if (body) await onSend(body, reply?.id);
     } catch (err) {
       setError(errorMessage(err));
       // Unless something new was typed meanwhile. This also works if the chat
       // was closed in the meantime: the text is there when it's opened again.
       updateDraft(draftRef.current || body);
+      if (reply) updateReply(replyRef.current ?? reply);
     } finally {
       setSendingImage(false);
     }
@@ -355,8 +440,13 @@ export default function ChatWindow({
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void handleSubmit();
+    } else if (e.key === "Escape" && replyingTo && !emojiOpen) {
+      updateReply(null);
     }
   }
+
+  const nameFor = (senderId: number) =>
+    senderId === me.id ? "You" : nameOf(user);
 
   // My most recent message shows "Sent" or "Seen".
   const lastMineId = messages.findLast((m) => m.senderId === me.id)?.id;
@@ -427,6 +517,17 @@ export default function ChatWindow({
             next.senderId === m.senderId &&
             isSameDay(m.createdAt, next.createdAt) &&
             msBetween(m.createdAt, next.createdAt) < GROUP_GAP_MS;
+          const bubbleTone = mine
+            ? "rounded-br-md bg-accent text-white"
+            : "rounded-bl-md bg-bubble";
+          const quote = m.replyTo && (
+            <ReplyQuote
+              reply={m.replyTo}
+              name={nameFor(m.replyTo.senderId)}
+              onAccent={mine}
+              onJump={() => jumpTo(m.replyTo!.id)}
+            />
+          );
 
           return (
             <div key={m.id}>
@@ -437,12 +538,15 @@ export default function ChatWindow({
                   </span>
                 </div>
               )}
-              {/* Avatar on the outside, then the bubble: mine on the right, theirs on the left. */}
+              {/* Avatar on the outside, then the bubble, then the reply button:
+                  mine on the right, theirs on the left. */}
               <div
+                data-message-id={m.id}
                 className={cx(
-                  "flex items-start gap-2",
+                  "group -mx-2 flex items-start gap-2 rounded-xl px-2 transition-colors duration-500",
                   groupedWithPrev ? "mt-0.5" : "mt-2.5",
                   mine && "flex-row-reverse",
+                  m.id === highlightId && "bg-accent-soft",
                 )}
               >
                 <MessageAvatar
@@ -456,21 +560,32 @@ export default function ChatWindow({
                   )}
                 >
                   {m.image ? (
-                    <ImageBubble
-                      image={m.image}
-                      title={new Date(m.createdAt).toLocaleString()}
-                      onOpen={() => setViewing(m.image)}
-                    />
+                    <>
+                      {quote && (
+                        <div
+                          className={cx(
+                            "mb-0.5 max-w-full rounded-[18px] p-1.5",
+                            bubbleTone,
+                          )}
+                        >
+                          {quote}
+                        </div>
+                      )}
+                      <ImageBubble
+                        image={m.image}
+                        title={new Date(m.createdAt).toLocaleString()}
+                        onOpen={() => setViewing(m.image)}
+                      />
+                    </>
                   ) : (
                     <div
                       className={cx(
                         "rounded-[18px] px-3 py-2 whitespace-pre-wrap wrap-anywhere",
-                        mine
-                          ? "rounded-br-md bg-accent text-white"
-                          : "rounded-bl-md bg-bubble",
+                        bubbleTone,
                       )}
                       title={new Date(m.createdAt).toLocaleString()}
                     >
+                      {quote && <div className="mb-1.5">{quote}</div>}
                       {m.body}
                     </div>
                   )}
@@ -483,6 +598,31 @@ export default function ChatWindow({
                     </div>
                   )}
                 </div>
+                {/* Shown on hover; always visible on touch screens, which can't hover. */}
+                <button
+                  type="button"
+                  className="mt-1.5 grid size-7 flex-none place-items-center rounded-full text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:bg-panel hover:text-fg focus-visible:opacity-100 [@media(hover:none)]:opacity-70"
+                  onClick={() => {
+                    updateReply(m);
+                    inputRef.current?.focus();
+                  }}
+                  aria-label="Reply"
+                  title="Reply"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="size-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m9 14-5-5 5-5" />
+                    <path d="M4 9h11a5 5 0 0 1 5 5v5" />
+                  </svg>
+                </button>
               </div>
             </div>
           );
@@ -534,6 +674,27 @@ export default function ChatWindow({
             <p className={cx(ui.error, "basis-full")} role="alert">
               {error}
             </p>
+          )}
+          {replyingTo && (
+            <div className="flex basis-full items-center gap-2 rounded-xl border-l-3 border-accent bg-panel-2 py-1.5 pr-1.5 pl-3 text-sm">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-accent">
+                  Replying to{" "}
+                  {replyingTo.senderId === me.id ? "yourself" : nameOf(user)}
+                </div>
+                <div className="truncate text-muted">
+                  {replyingTo.image ? "📷 Photo" : replyingTo.body}
+                </div>
+              </div>
+              <button
+                type="button"
+                className={cx(ui.btnGhost, "text-xl leading-none")}
+                onClick={() => updateReply(null)}
+                aria-label="Cancel reply"
+              >
+                ×
+              </button>
+            </div>
           )}
           {attachment && (
             <div className="basis-full">

@@ -29,6 +29,16 @@ export interface MessageImage {
   height: number;
 }
 
+/** The message a reply quotes: just enough to show a preview of it above the reply. */
+export interface ReplyPreview {
+  id: number;
+  senderId: number;
+  /** The quoted text, cut off after 200 characters; "" for an image. */
+  body: string;
+  /** Where to load the picture from, if the quoted message is an image. */
+  imageUrl: string | null;
+}
+
 export interface Message {
   id: number;
   senderId: number;
@@ -37,6 +47,8 @@ export interface Message {
   body: string;
   /** The picture, for an image message; null for a text message. */
   image: MessageImage | null;
+  /** The earlier message in this conversation that this one replies to, if any. */
+  replyTo: ReplyPreview | null;
   /** ISO 8601 timestamp */
   createdAt: string;
   /** ISO 8601 timestamp, or null while unread */
@@ -110,7 +122,8 @@ export type SendMessageAck =
 
 export interface ClientToServerEvents {
   "message:send": (
-    payload: { to: number; body: string },
+    // replyTo: id of the message being replied to (optional).
+    payload: { to: number; body: string; replyTo?: number },
     ack: (res: SendMessageAck) => void,
   ) => void;
   typing: (payload: { to: number; typing: boolean }) => void;

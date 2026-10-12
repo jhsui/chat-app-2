@@ -80,6 +80,7 @@ export function attachSocket(
         const to = Number(payload?.to);
         const body =
           typeof payload?.body === "string" ? payload.body.trim() : "";
+        const replyToId = Number(payload?.replyTo);
 
         if (!body) return reply({ error: "Message is empty" });
         if (body.length > MAX_MESSAGE_LENGTH)
@@ -89,7 +90,9 @@ export function attachSocket(
           return reply({ error: "User not found" });
 
         try {
-          const message = await db.createMessage(me.id, to, body);
+          const message = await db.createMessage(me.id, to, body, {
+            replyToId: isValidId(replyToId) ? replyToId : undefined,
+          });
           emitNewMessage(io, message);
           reply({ ok: true, message });
         } catch (err) {
