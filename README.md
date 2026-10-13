@@ -15,6 +15,8 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 - Conversation list sorted by latest message, with unread badges
 - Online / offline status, typing indicator, and read receipts: one tick on each message you've sent, two blue ticks once it's been seen
 - **Replies:** hover a message (or tap the arrow on a phone) to reply to it; the reply shows a quote of the original, and clicking the quote jumps to it
+- **Reactions:** react to any message with 👍 ❤️ 😂 😮 😢 🙏, or any other emoji from the full picker via "+" (one per person per message; pick it again to take it back). They appear under the message for both people straight away
+- **Delete:** remove a message you sent, for both people, up to 2 days after sending it. It leaves a "This message was deleted" placeholder, and a deleted picture's file is removed from storage
 - Emoji picker in the message box, with search, categories and skin tones ([emoji-picker-react](https://github.com/ealush/emoji-picker-react), downloaded the first time it's opened)
 - Per-chat drafts: unsent text stays with its chat when you switch, with a "Draft: …" preview in the sidebar (kept until you reload)
 - Message history with "load older" pagination
@@ -48,7 +50,7 @@ Both run exactly the same SQL (`server/src/db.ts`). Tables are created automatic
 - To use a real Postgres locally, put `DATABASE_URL=...` in `server/.env`.
 - To start over with an empty local database, stop the app and delete `server/data/pglite`.
 - To browse the data, point any Postgres client (pgAdmin, TablePlus, `psql`) at your `DATABASE_URL`. PGlite's folder can only be opened by the app itself.
-- Tests use a throwaway in-memory PGlite by default. `TEST_DATABASE_URL=postgres://... npm test` runs them against a real server instead (**it wipes the `users` and `messages` tables in that database**).
+- Tests use a throwaway in-memory PGlite by default. `TEST_DATABASE_URL=postgres://... npm test` runs them against a real server instead (**it wipes the `users`, `messages` and `reactions` tables in that database**).
 
 ## Avatars and chat images (Supabase Storage)
 
@@ -168,13 +170,15 @@ chat-app/
 
 ## Socket events
 
-| Client → server | Payload                        | Server → client   | Payload                          |
-| --------------- | ------------------------------ | ----------------- | -------------------------------- |
-| `message:send`  | `{ to, body, replyTo? }` + ack | `message:new`     | `Message`                        |
-| `typing`        | `{ to, typing }`               | `typing`          | `{ from, typing }`               |
-| `messages:read` | `{ from }`                     | `messages:read`   | `{ readerId, senderId, upToId }` |
-|                 |                                | `presence`        | `{ userId, online }`             |
-|                 |                                | `profile:updated` | `PublicUser` (new name/avatar)   |
+| Client → server  | Payload                              | Server → client     | Payload                                    |
+| ---------------- | ------------------------------------ | ------------------- | ------------------------------------------ |
+| `message:send`   | `{ to, body, replyTo? }` + ack       | `message:new`       | `Message`                                  |
+| `typing`         | `{ to, typing }`                     | `typing`            | `{ from, typing }`                         |
+| `messages:read`  | `{ from }`                           | `messages:read`     | `{ readerId, senderId, upToId }`           |
+| `message:delete` | `{ messageId }` + ack                | `message:deleted`   | `Message` (what's left: see `deletedAt`)   |
+| `message:react`  | `{ messageId, emoji \| null }` + ack | `message:reactions` | `{ messageId, reactions }` (the full list) |
+|                  |                                      | `presence`          | `{ userId, online }`                       |
+|                  |                                      | `profile:updated`   | `PublicUser` (new name/avatar)             |
 
 Image messages are sent with `POST /api/messages/:userId/image?width=…&height=…` (the image bytes as the body, ≤ 1 MB) and arrive as a `message:new` whose `image` is `{ url, width, height }`. The `url` is `GET /api/images/:messageId`, which serves the file to the sender and recipient only.
 
@@ -192,5 +196,5 @@ Image messages are sent with `POST /api/messages/:userId/image?width=…&height=
 - Group chats (a `conversations` + `participants` table instead of sender/recipient pairs)
 - Captions on images, other file attachments, animated GIFs
 - Rate limiting on login and message sending (e.g. `express-rate-limit`)
-- Edit / delete messages, emoji reactions
+- Edit messages
 - Deploy (Railway, Render or Fly.io) — add a Postgres database, and set `DATABASE_URL`, `JWT_SECRET` and `NODE_ENV=production`

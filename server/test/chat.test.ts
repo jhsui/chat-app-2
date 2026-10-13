@@ -18,13 +18,13 @@ let baseUrl: string;
 /**
  * By default the tests use a throwaway in-memory PGlite database. To run them
  * against a real Postgres server instead, set TEST_DATABASE_URL — note that
- * the users and messages tables in that database are wiped first.
+ * the users, messages and reactions tables in that database are wiped first.
  */
 async function testDbConfig(): Promise<DbConfig> {
   const url = process.env.TEST_DATABASE_URL;
   if (!url) return { pgliteDir: "memory://" };
   const pool = new pg.Pool({ connectionString: url });
-  await pool.query("DROP TABLE IF EXISTS messages, users");
+  await pool.query("DROP TABLE IF EXISTS reactions, messages, users");
   await pool.end();
   return { databaseUrl: url };
 }
@@ -633,6 +633,7 @@ test("replies quote an earlier message from the same conversation only", async (
     senderId: bobId,
     body: question.body.slice(0, 200),
     imageUrl: null,
+    deleted: false,
   });
   assert.deepEqual(await bobGets, answer);
 
@@ -680,6 +681,200 @@ test("replies quote an earlier message from the same conversation only", async (
   aSock.disconnect();
   bSock.disconnect();
   cSock.disconnect();
+});
+
+test("reactions: add, change, remove, and only in your own conversations", async () => {
+  const bobId: number = (await bob.request("GET", "/api/auth/me")).body.user.id;
+  const aliceId: number = (await alice.request("GET", "/api/auth/me")).body.user
+    .id;
+  const aSock = await socketFor(alice);
+  const bSock = await socketFor(bob);
+  const sent = await bSock.emitWithAck("message:send", {
+    to: aliceId,
+    body: "we won!",
+  });
+  assert.ok(sent.ok);
+  const messageId = sent.message.id;
+  assert.deepEqual(sent.message.reactions, []);
+
+  // Alice reacts; both of them are told, with the full list.
+  let bobTold = once(bSock, "message:reactions");
+  let aliceTold = once(aSock, "message:reactions");
+  let ack = await aSock.emitWithAck("message:react", {
+    messageId,
+    emoji: "👍",
+  });
+  assert.ok(ack.ok);
+  const first = { messageId, reactions: [{ userId: aliceId, emoji: "👍" }] };
+  assert.deepEqual(await bobTold, first);
+  assert.deepEqual(await aliceTold, first);
+
+  // Bob reacts too, and Alice changes hers: still one each.
+  await bSock.emitWithAck("message:react", { messageId, emoji: "😂" });
+  bobTold = once(bSock, "message:reactions");
+  await aSock.emitWithAck("message:react", { messageId, emoji: "❤️" });
+  assert.deepEqual(
+    new Set((await bobTold).reactions.map((r) => `${r.userId}${r.emoji}`)),
+    new Set([`${aliceId}❤️`, `${bobId}😂`]),
+  );
+
+  // They come back with the history.
+  const lastMessage = async () =>
+    (await alice.request("GET", `/api/messages/${bobId}`)).body.messages.at(-1);
+  assert.equal((await lastMessage()).reactions.length, 2);
+
+  // Removing one.
+  aliceTold = once(aSock, "message:reactions");
+  await bSock.emitWithAck("message:react", { messageId, emoji: null });
+  assert.deepEqual((await aliceTold).reactions, [
+    { userId: aliceId, emoji: "❤️" },
+  ]);
+
+  // Any single emoji works, including ones made of several characters.
+  for (const emoji of ["🦄", "👍🏽", "🇯🇵", "👨‍👩‍👧", "1️⃣"]) {
+    aliceTold = once(aSock, "message:reactions");
+    ack = await aSock.emitWithAck("message:react", { messageId, emoji });
+    assert.ok(ack.ok, emoji);
+    assert.deepEqual((await aliceTold).reactions, [{ userId: aliceId, emoji }]);
+  }
+  await aSock.emitWithAck("message:react", { messageId, emoji: "❤️" });
+
+  // Not a single emoji, not a real message, not your conversation: refused.
+  const errorOf = async (sock: ClientSocket, payload: object) => {
+    const res = await sock.emitWithAck("message:react", payload as never);
+    return "error" in res ? res.error : "";
+  };
+  for (const emoji of ["hello", "👍👍", "👍 ", "", 7, "x".repeat(100)])
+    assert.match(await errorOf(aSock, { messageId, emoji }), /single emoji/);
+  assert.match(
+    await errorOf(aSock, { messageId: 99_999_999_999, emoji: "👍" }),
+    /not found/,
+  );
+  const carol = client();
+  await carol.request("POST", "/api/auth/login", {
+    username: "carol",
+    password: "secret1",
+  });
+  const cSock = await socketFor(carol);
+  assert.match(await errorOf(cSock, { messageId, emoji: "👍" }), /not found/);
+  assert.deepEqual((await lastMessage()).reactions, [
+    { userId: aliceId, emoji: "❤️" },
+  ]);
+
+  aSock.disconnect();
+  bSock.disconnect();
+  cSock.disconnect();
+});
+
+test("deleting a message empties it for both people and removes its picture", async () => {
+  const bobId: number = (await bob.request("GET", "/api/auth/me")).body.user.id;
+  const aliceId: number = (await alice.request("GET", "/api/auth/me")).body.user
+    .id;
+  const aSock = await socketFor(alice);
+  const bSock = await socketFor(bob);
+  const send = async (
+    sock: ClientSocket,
+    payload: { to: number; body: string; replyTo?: number },
+  ) => {
+    const ack = await sock.emitWithAck("message:send", payload);
+    assert.ok(ack.ok);
+    return ack.message;
+  };
+  const remove = async (sock: ClientSocket, messageId: number) => {
+    const res = await sock.emitWithAck("message:delete", { messageId });
+    return "error" in res ? res.error : "ok";
+  };
+  const history = async () =>
+    (await bob.request("GET", `/api/messages/${aliceId}`)).body.messages;
+
+  // Alice sends something, Bob reacts and replies to it.
+  const oops = await send(aSock, { to: bobId, body: "my password is hunter2" });
+  await bSock.emitWithAck("message:react", { messageId: oops.id, emoji: "😮" });
+  const reply = await send(bSock, {
+    to: aliceId,
+    body: "delete that!",
+    replyTo: oops.id,
+  });
+
+  // Only the sender can delete it, and only while it's recent enough. (The
+  // real limit is 2 days, so ask the database directly with a limit of none.)
+  assert.match(await remove(bSock, oops.id), /not found/);
+  assert.equal(await server.db.deleteMessage(oops.id, aliceId, 0), "expired");
+  assert.equal(
+    (await history()).find((m: { id: number }) => m.id === oops.id).body,
+    oops.body,
+    "an expired delete changes nothing",
+  );
+  assert.match(await remove(aSock, 99_999_999_999), /not found/);
+
+  // Both are told, and what's left has no text, reactions or reply link.
+  const bobTold = once(bSock, "message:deleted");
+  const aliceTold = once(aSock, "message:deleted");
+  assert.equal(await remove(aSock, oops.id), "ok");
+  const gone = await bobTold;
+  assert.deepEqual(await aliceTold, gone);
+  assert.equal(gone.id, oops.id);
+  assert.equal(gone.body, "");
+  assert.ok(gone.deletedAt);
+  assert.deepEqual(gone.reactions, []);
+
+  // The history agrees, and the reply's quote no longer shows the text.
+  let messages = await history();
+  assert.deepEqual(
+    messages.find((m: { id: number }) => m.id === oops.id),
+    gone,
+  );
+  const quote = messages.find((m: { id: number }) => m.id === reply.id).replyTo;
+  assert.deepEqual(quote, {
+    id: oops.id,
+    senderId: aliceId,
+    body: "",
+    imageUrl: null,
+    deleted: true,
+  });
+
+  // It can't be deleted twice, reacted to, or replied to any more.
+  assert.match(await remove(aSock, oops.id), /not found/);
+  const react = await bSock.emitWithAck("message:react", {
+    messageId: oops.id,
+    emoji: "👍",
+  });
+  assert.ok("error" in react);
+  const late = await send(bSock, {
+    to: aliceId,
+    body: "what was it?",
+    replyTo: oops.id,
+  });
+  assert.equal(late.replyTo, null);
+
+  // Deleting a picture also removes the file, and it stops being served.
+  const r = await alice.upload(
+    `/api/messages/${bobId}/image?width=10&height=10`,
+    WEBP,
+    "image/webp",
+    "POST",
+  );
+  const picture = r.body.message;
+  const filesBefore = fakeChatImages.files.size;
+  assert.equal(await remove(aSock, picture.id), "ok");
+  assert.equal(fakeChatImages.files.size, filesBefore - 1);
+  const served = await fetch(baseUrl + picture.image.url, {
+    headers: { cookie: alice.cookie },
+  });
+  assert.equal(served.status, 404);
+  messages = await history();
+  assert.equal(messages.at(-1).image, null);
+  assert.ok(messages.at(-1).deletedAt);
+
+  // The conversation list knows its latest message was deleted.
+  const convo = (
+    await bob.request("GET", "/api/conversations")
+  ).body.conversations.find((c: { id: number }) => c.id === aliceId);
+  assert.equal(convo.lastIsDeleted, true);
+  assert.equal(convo.lastIsImage, false);
+
+  aSock.disconnect();
+  bSock.disconnect();
 });
 
 test("uploads explain when storage isn't configured", async () => {

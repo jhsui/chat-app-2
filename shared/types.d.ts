@@ -37,6 +37,15 @@ export interface ReplyPreview {
   body: string;
   /** Where to load the picture from, if the quoted message is an image. */
   imageUrl: string | null;
+  /** True if the quoted message has since been deleted (then body is "" and imageUrl null). */
+  deleted: boolean;
+}
+
+/** One person's reaction to a message. Each person has at most one per message. */
+export interface Reaction {
+  userId: number;
+  /** A single emoji, e.g. "👍". */
+  emoji: string;
 }
 
 export interface Message {
@@ -49,6 +58,14 @@ export interface Message {
   image: MessageImage | null;
   /** The earlier message in this conversation that this one replies to, if any. */
   replyTo: ReplyPreview | null;
+  /** Oldest first. */
+  reactions: Reaction[];
+  /**
+   * ISO 8601 timestamp of when the sender deleted the message, or null. A
+   * deleted message keeps its place in the chat but has nothing in it: body is
+   * "", image and replyTo are null, and reactions is empty.
+   */
+  deletedAt: string | null;
   /** ISO 8601 timestamp */
   createdAt: string;
   /** ISO 8601 timestamp, or null while unread */
@@ -73,6 +90,8 @@ export interface Conversation extends UserWithPresence {
   lastBody: string;
   /** True if the latest message is a picture (then lastBody is ""). */
   lastIsImage: boolean;
+  /** True if the latest message was deleted (then lastBody is ""). */
+  lastIsDeleted: boolean;
   lastSenderId: number;
   lastAt: string;
   unread: number;
@@ -120,6 +139,8 @@ export interface ErrorResponse {
 export type SendMessageAck =
   { ok: true; message: Message } | { ok?: false; error: string };
 
+export type Ack = { ok: true } | { ok?: false; error: string };
+
 export interface ClientToServerEvents {
   "message:send": (
     // replyTo: id of the message being replied to (optional).
@@ -128,6 +149,16 @@ export interface ClientToServerEvents {
   ) => void;
   typing: (payload: { to: number; typing: boolean }) => void;
   "messages:read": (payload: { from: number }) => void;
+  /** Deletes a message I sent, for both people. It can't be undone. */
+  "message:delete": (
+    payload: { messageId: number },
+    ack: (res: Ack) => void,
+  ) => void;
+  /** Sets my reaction to a message, replacing any earlier one; null removes it. */
+  "message:react": (
+    payload: { messageId: number; emoji: string | null },
+    ack: (res: Ack) => void,
+  ) => void;
 }
 
 export interface ServerToClientEvents {
@@ -137,6 +168,13 @@ export interface ServerToClientEvents {
     readerId: number;
     senderId: number;
     upToId: number;
+  }) => void;
+  /** A message was deleted; this is what's left of it (see Message.deletedAt). */
+  "message:deleted": (message: Message) => void;
+  /** A message's reactions changed; this is the complete new list. */
+  "message:reactions": (payload: {
+    messageId: number;
+    reactions: Reaction[];
   }) => void;
   presence: (payload: { userId: number; online: boolean }) => void;
   /** Someone changed their display name or avatar. */

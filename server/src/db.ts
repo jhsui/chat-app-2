@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import pg from "pg";
-import type { Message, Profile, PublicUser } from "../../shared/types.js";
+import type {
+  Message,
+  Profile,
+  PublicUser,
+  Reaction,
+} from "../../shared/types.js";
 
 /**
  * Where the data lives:
@@ -55,11 +60,32 @@ const SCHEMA = `
   -- Replies: the earlier message this one quotes.
   ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER
     REFERENCES messages(id) ON DELETE SET NULL;
+
+  -- Deleting a message empties it (text, image, reply link, reactions) but keeps
+  -- the row, so the chat can show "This message was deleted" in its place.
+  ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+  -- Emoji reactions. The primary key allows one per person per message.
+  CREATE TABLE IF NOT EXISTS reactions (
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    emoji      TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (message_id, user_id)
+  );
 `;
 
 /** The public user fields, for a query where the users table is aliased as "u". */
 const USER_COLUMNS = `
   u.id, u.username, u.display_name AS "displayName", u.avatar_url AS "avatarUrl"
+`;
+
+/** A message's reactions as a JSON array, oldest first ([] if none). $1 or a column: the message id. */
+const reactionsOf = (messageId: string) => `
+  COALESCE((
+    SELECT json_agg(json_build_object('userId', x.user_id, 'emoji', x.emoji) ORDER BY x.created_at)
+    FROM reactions x WHERE x.message_id = ${messageId}
+  ), '[]'::json)
 `;
 
 /**
@@ -68,11 +94,12 @@ const USER_COLUMNS = `
  * message is read: its text is cut off after 200 characters.
  */
 const MESSAGE_COLUMNS = `
+  ${reactionsOf("m.id")} AS reactions,
   m.id, m.sender_id AS "senderId", m.recipient_id AS "recipientId", m.body,
-  m.created_at AS "createdAt", m.read_at AS "readAt",
+  m.created_at AS "createdAt", m.read_at AS "readAt", m.deleted_at AS "deletedAt",
   (m.image_key IS NOT NULL) AS "hasImage", m.image_width AS "imageWidth", m.image_height AS "imageHeight",
   r.id AS "replyId", r.sender_id AS "replySenderId", left(r.body, 200) AS "replyBody",
-  (r.image_key IS NOT NULL) AS "replyHasImage"
+  (r.image_key IS NOT NULL) AS "replyHasImage", (r.deleted_at IS NOT NULL) AS "replyDeleted"
 `;
 const REPLY_JOIN = `LEFT JOIN messages r ON r.id = m.reply_to_id`;
 
@@ -87,6 +114,7 @@ export interface UserWithPassword extends PublicUser {
 export interface ConversationRow extends PublicUser {
   lastBody: string;
   lastIsImage: boolean;
+  lastIsDeleted: boolean;
   lastSenderId: number;
   lastAt: string;
   unread: number;
@@ -143,6 +171,32 @@ export interface Db {
     options?: { before?: number; limit?: number },
   ): Promise<Message[]>;
   getConversations(me: number): Promise<ConversationRow[]>;
+  /**
+   * Deletes a message for both people: empties it and removes its reactions,
+   * leaving a placeholder. Only its sender can, and only until the message is
+   * `maxAgeMs` old. Returns what's left, plus the storage key of its picture
+   * (if it had one) so the file can be removed; "expired" if it's too old; or
+   * null if `userId` has no such message to delete.
+   */
+  deleteMessage(
+    messageId: number,
+    userId: number,
+    maxAgeMs: number,
+  ): Promise<{ message: Message; imageKey: string | null } | "expired" | null>;
+  /**
+   * Sets (or with null, removes) `userId`'s reaction to a message. Returns the
+   * message's two participants and its reactions afterwards, or null if there
+   * is no such message in one of `userId`'s conversations.
+   */
+  setReaction(
+    messageId: number,
+    userId: number,
+    emoji: string | null,
+  ): Promise<{
+    senderId: number;
+    recipientId: number;
+    reactions: Reaction[];
+  } | null>;
   /** Marks everything `other` sent to `me` as read. */
   markRead(
     me: number,
@@ -226,10 +280,11 @@ const isoOrNull = (value: Date | string | null) =>
 
 type MessageRow = Omit<
   Message,
-  "createdAt" | "readAt" | "image" | "replyTo"
+  "createdAt" | "readAt" | "deletedAt" | "image" | "replyTo"
 > & {
   createdAt: Date;
   readAt: Date | null;
+  deletedAt: Date | null;
   hasImage: boolean;
   imageWidth: number | null;
   imageHeight: number | null;
@@ -238,6 +293,7 @@ type MessageRow = Omit<
   replySenderId: number | null;
   replyBody: string | null;
   replyHasImage: boolean | null;
+  replyDeleted: boolean | null;
 };
 const toMessage = ({
   hasImage,
@@ -247,11 +303,13 @@ const toMessage = ({
   replySenderId,
   replyBody,
   replyHasImage,
+  replyDeleted,
   ...row
 }: MessageRow): Message => ({
   ...row,
   createdAt: iso(row.createdAt),
   readAt: isoOrNull(row.readAt),
+  deletedAt: isoOrNull(row.deletedAt),
   image: hasImage
     ? {
         url: messageImagePath(row.id),
@@ -267,6 +325,7 @@ const toMessage = ({
           senderId: replySenderId ?? 0,
           body: replyBody ?? "",
           imageUrl: replyHasImage ? messageImagePath(replyId) : null,
+          deleted: Boolean(replyDeleted),
         },
 });
 
@@ -387,7 +446,7 @@ export async function openDb(config: DbConfig): Promise<Db> {
              (sender_id, recipient_id, body, image_key, image_width, image_height, reply_to_id)
            VALUES ($1, $2, $3, $4, $5, $6, (
              SELECT id FROM messages
-             WHERE id = $7::int
+             WHERE id = $7::int AND deleted_at IS NULL
                AND ((sender_id = $1 AND recipient_id = $2) OR (sender_id = $2 AND recipient_id = $1))
            ))
            RETURNING *
@@ -443,6 +502,7 @@ export async function openDb(config: DbConfig): Promise<Db> {
          )
          SELECT ${USER_COLUMNS},
                 m.body AS "lastBody", (m.image_key IS NOT NULL) AS "lastIsImage",
+                (m.deleted_at IS NOT NULL) AS "lastIsDeleted",
                 m.sender_id AS "lastSenderId", m.created_at AS "lastAt",
                 (SELECT COUNT(*)::int FROM messages
                   WHERE sender_id = u.id AND recipient_id = $1 AND read_at IS NULL) AS unread
@@ -453,6 +513,77 @@ export async function openDb(config: DbConfig): Promise<Db> {
         [me],
       );
       return rows.map((r) => ({ ...r, lastAt: iso(r.lastAt) }));
+    },
+
+    async deleteMessage(messageId, userId, maxAgeMs) {
+      // Only the sender can delete, only once, and only for a while. The age is
+      // worked out by the database, so it doesn't depend on any other clock.
+      const { rows: found } = await sql.query<{ expired: boolean }>(
+        `SELECT created_at < now() - make_interval(secs => $3) AS expired
+         FROM messages WHERE id = $1 AND sender_id = $2 AND deleted_at IS NULL`,
+        [messageId, userId, maxAgeMs / 1000],
+      );
+      if (!found[0]) return null;
+      if (found[0].expired) return "expired";
+
+      // "old" reads the picture's key from before the update, in the same
+      // statement. The WHERE repeats the checks in case of two deletes at once.
+      const { rows } = await sql.query<
+        MessageRow & { imageKey: string | null }
+      >(
+        `WITH old AS (SELECT image_key FROM messages WHERE id = $1),
+         m AS (
+           UPDATE messages
+           SET deleted_at = now(), body = '', reply_to_id = NULL,
+               image_key = NULL, image_width = NULL, image_height = NULL
+           WHERE id = $1 AND sender_id = $2 AND deleted_at IS NULL
+           RETURNING *
+         )
+         SELECT ${MESSAGE_COLUMNS}, (SELECT image_key FROM old) AS "imageKey"
+         FROM m ${REPLY_JOIN}`,
+        [messageId, userId],
+      );
+      const row = rows[0];
+      if (!row) return null;
+      await sql.query(`DELETE FROM reactions WHERE message_id = $1`, [
+        messageId,
+      ]);
+      const { imageKey, ...message } = row;
+      return { message: { ...toMessage(message), reactions: [] }, imageKey };
+    },
+
+    async setReaction(messageId, userId, emoji) {
+      // Only the two people in the conversation can react to a message.
+      const { rows: found } = await sql.query<{
+        senderId: number;
+        recipientId: number;
+      }>(
+        `SELECT sender_id AS "senderId", recipient_id AS "recipientId" FROM messages
+         WHERE id = $1 AND (sender_id = $2 OR recipient_id = $2) AND deleted_at IS NULL`,
+        [messageId, userId],
+      );
+      const message = found[0];
+      if (!message) return null;
+
+      if (emoji === null) {
+        await sql.query(
+          `DELETE FROM reactions WHERE message_id = $1 AND user_id = $2`,
+          [messageId, userId],
+        );
+      } else {
+        // Reacting again replaces the earlier reaction.
+        await sql.query(
+          `INSERT INTO reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)
+           ON CONFLICT (message_id, user_id)
+           DO UPDATE SET emoji = EXCLUDED.emoji, created_at = now()`,
+          [messageId, userId, emoji],
+        );
+      }
+      const { rows } = await sql.query<{ reactions: Reaction[] }>(
+        `SELECT ${reactionsOf("$1")} AS reactions`,
+        [messageId],
+      );
+      return { ...message, reactions: rows[0]?.reactions ?? [] };
     },
 
     async markRead(me, other) {

@@ -50,7 +50,10 @@ export async function createServer({
   const presence = createPresence();
   const app = express();
   const httpServer = http.createServer(app);
-  const io = attachSocket(httpServer, db, presence, { corsOrigin });
+  const io = attachSocket(httpServer, db, presence, {
+    corsOrigin,
+    chatImageStorage,
+  });
 
   app.disable("x-powered-by");
   app.use(express.json({ limit: "10kb" }));

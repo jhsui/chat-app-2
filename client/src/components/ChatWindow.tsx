@@ -34,6 +34,14 @@ import ImageViewer from "./ImageViewer.tsx";
 const EmojiPicker = lazy(() => import("./EmojiPicker.tsx"));
 
 const MAX_MESSAGE_LENGTH = 2000;
+/** How long after sending a message I can still delete it. Same as DELETE_WINDOW_MS on the server, which enforces it. */
+const DELETE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
+/** The reactions offered straight away on a message; "+" opens the full picker for any other emoji. */
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+// Look of the small round buttons beside a message (react, reply). They show on
+// hover, and are always visible on touch screens, which can't hover.
+const messageAction =
+  "grid size-7 flex-none place-items-center rounded-full text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:bg-panel hover:text-fg focus-visible:opacity-100 [@media(hover:none)]:opacity-70";
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 /** Size of the avatar beside each run of messages, in pixels. */
@@ -170,7 +178,11 @@ function ReplyQuote({
       <span className="min-w-0">
         <span className="block font-semibold">{name}</span>
         <span className="line-clamp-2 opacity-80">
-          {reply.imageUrl ? "Photo" : reply.body}
+          {reply.deleted
+            ? "Deleted message"
+            : reply.imageUrl
+              ? "Photo"
+              : reply.body}
         </span>
       </span>
     </button>
@@ -198,6 +210,10 @@ interface ChatWindowProps {
   initialReplyTo: Message | null;
   /** Called when a reply is started, sent or cancelled, so it can be kept the same way. */
   onReplyChange: (message: Message | null) => void;
+  /** Sets my reaction to a message (null removes it); rejects with a readable error. */
+  onReact: (messageId: number, emoji: string | null) => Promise<void>;
+  /** Deletes one of my messages for both people; rejects with a readable error. */
+  onDelete: (messageId: number) => Promise<void>;
   onTyping: (typing: boolean) => void;
   onBack: () => void;
   /** Opens this person's profile. */
@@ -226,6 +242,8 @@ export default function ChatWindow({
   onDraftChange,
   initialReplyTo,
   onReplyChange,
+  onReact,
+  onDelete,
   onTyping,
   onBack,
   onShowProfile,
@@ -237,6 +255,7 @@ export default function ChatWindow({
   const [replyingTo, setReplyingTo] = useState(initialReplyTo);
   const replyRef = useRef(initialReplyTo);
   const [highlightId, setHighlightId] = useState<number | null>(null); // message just jumped to
+  const [reactingId, setReactingId] = useState<number | null>(null); // message whose reaction bar is open
   const [error, setError] = useState("");
   // The picture waiting to be sent, shown above the text box.
   const [attachment, setAttachment] = useState<{
@@ -245,7 +264,10 @@ export default function ChatWindow({
   } | null>(null);
   const [sendingImage, setSendingImage] = useState(false);
   const [viewing, setViewing] = useState<MessageImage | null>(null); // picture opened large
-  const [emojiOpen, setEmojiOpen] = useState(false);
+  // What the emoji picker is open for: the text box ("draft"), a reaction to a
+  // message (its id), or null when it's closed.
+  const [emojiTarget, setEmojiTarget] = useState<"draft" | number | null>(null);
+  const emojiOpen = emojiTarget !== null;
   const composerRef = useRef<HTMLDivElement>(null);
   // Where to put the cursor once an inserted emoji is in the text box.
   const caretRef = useRef<number | null>(null);
@@ -279,6 +301,9 @@ export default function ChatWindow({
       const mine = messages.at(-1)?.senderId === me.id;
       if (s.nearBottom || mine || s.lastId === null)
         el.scrollTop = el.scrollHeight;
+    } else if (s.nearBottom && el.scrollHeight > s.height) {
+      // Same messages but taller, e.g. a reaction added under the last one.
+      el.scrollTop = el.scrollHeight;
     }
     scrollState.current = { ...s, firstId, lastId, height: el.scrollHeight };
   }, [messages, me.id]);
@@ -353,6 +378,60 @@ export default function ChatWindow({
     return () => clearTimeout(timer);
   }, [highlightId]);
 
+  // If the message being replied to gets deleted, there's nothing left to reply to.
+  useEffect(() => {
+    if (
+      replyingTo &&
+      messages.some((m) => m.id === replyingTo.id && m.deletedAt)
+    ) {
+      replyRef.current = null;
+      setReplyingTo(null);
+    }
+  }, [messages, replyingTo]);
+
+  /** Deletes one of my messages for both of us, after asking to be sure. */
+  async function remove(message: Message) {
+    const sure = window.confirm(
+      "Delete this message for both of you? This can't be undone.",
+    );
+    if (!sure) return;
+    try {
+      await onDelete(message.id);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  /** Sets my reaction to a message; picking the one it already has takes it back. */
+  async function react(message: Message, emoji: string) {
+    setReactingId(null);
+    const current = message.reactions.find((r) => r.userId === me.id)?.emoji;
+    try {
+      await onReact(message.id, current === emoji ? null : emoji);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  // Close the reaction bar with Esc, or by clicking anywhere outside it.
+  useEffect(() => {
+    if (reactingId === null) return;
+    function onPointerDown(e: PointerEvent) {
+      const inside =
+        e.target instanceof Element && e.target.closest("[data-reaction-bar]");
+      if (!inside) setReactingId(null);
+    }
+    function onKeyDown(e: globalThis.KeyboardEvent) {
+      if (e.key === "Escape") setReactingId(null);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [reactingId]);
+
   /** Tells the other person we're typing, until 2 seconds pass without a change. */
   function noteTyping() {
     const t = typingState.current;
@@ -396,11 +475,12 @@ export default function ChatWindow({
   useEffect(() => {
     if (!emojiOpen) return;
     function onPointerDown(e: PointerEvent) {
-      if (!composerRef.current?.contains(e.target as Node)) setEmojiOpen(false);
+      if (!composerRef.current?.contains(e.target as Node))
+        setEmojiTarget(null);
     }
     function onKeyDown(e: globalThis.KeyboardEvent) {
       if (e.key !== "Escape") return;
-      setEmojiOpen(false);
+      setEmojiTarget(null);
       inputRef.current?.focus();
     }
     document.addEventListener("pointerdown", onPointerDown);
@@ -449,7 +529,7 @@ export default function ChatWindow({
     updateDraft("");
     updateReply(null);
     stopTyping();
-    setEmojiOpen(false);
+    setEmojiTarget(null);
     inputRef.current?.focus();
     try {
       // A picture and text go out as two messages, picture first.
@@ -481,6 +561,15 @@ export default function ChatWindow({
     }
   }
 
+  /** An emoji was chosen in the picker: it's a reaction, or goes into the text box. */
+  function handleEmojiPick(emoji: string) {
+    if (emojiTarget === "draft") return insertEmoji(emoji);
+    const message = messages.find((m) => m.id === emojiTarget);
+    setEmojiTarget(null);
+    if (message) void react(message, emoji);
+  }
+
+  const now = new Date().toISOString();
   const nameFor = (senderId: number) =>
     senderId === me.id ? "You" : nameOf(user);
 
@@ -571,15 +660,16 @@ export default function ChatWindow({
                   </span>
                 </div>
               )}
-              {/* Avatar on the outside, then the bubble, then the reply button:
-                  mine on the right, theirs on the left. */}
+              {/* Avatar on the outside, then the bubble, then the react and
+                  reply buttons: mine on the right, theirs on the left. */}
               <div
                 data-message-id={m.id}
                 className={cx(
-                  "group -mx-2 flex items-start gap-2 rounded-xl px-2 transition-colors duration-500",
+                  "group relative -mx-2 flex items-start gap-2 rounded-xl px-2 transition-colors duration-500",
                   groupedWithPrev ? "mt-0.5" : "mt-2.5",
                   mine && "flex-row-reverse",
-                  m.id === highlightId && "bg-accent-soft",
+                  (m.id === highlightId || m.id === emojiTarget) &&
+                    "bg-accent-soft",
                 )}
               >
                 <MessageAvatar
@@ -592,7 +682,16 @@ export default function ChatWindow({
                     mine ? "items-end" : "items-start",
                   )}
                 >
-                  {m.image ? (
+                  {m.deletedAt ? (
+                    <div
+                      className="rounded-[18px] border border-line px-3 py-2 text-muted italic"
+                      title={`Deleted ${formatDateTime(m.deletedAt)}`}
+                    >
+                      {mine
+                        ? "You deleted this message"
+                        : "This message was deleted"}
+                    </div>
+                  ) : m.image ? (
                     <>
                       {quote && (
                         <div
@@ -639,37 +738,189 @@ export default function ChatWindow({
                       )}
                     </div>
                   )}
+                  {m.reactions.length > 0 && (
+                    <div className="mt-0.5 flex gap-1">
+                      {/* One chip per emoji; clicking it gives (or takes back) the same reaction. */}
+                      {[...new Set(m.reactions.map((r) => r.emoji))].map(
+                        (emoji) => {
+                          const by = m.reactions.filter(
+                            (r) => r.emoji === emoji,
+                          );
+                          const byMe = by.some((r) => r.userId === me.id);
+                          const who = by
+                            .map((r) => nameFor(r.userId))
+                            .join(" and ");
+                          return (
+                            <button
+                              key={emoji}
+                              type="button"
+                              className={cx(
+                                "flex items-center gap-1 rounded-full border px-1.5 py-px text-sm",
+                                byMe
+                                  ? "border-accent bg-accent-soft"
+                                  : "border-line bg-panel",
+                              )}
+                              onClick={() => void react(m, emoji)}
+                              title={who}
+                              aria-label={`${emoji} from ${who}`}
+                              aria-pressed={byMe}
+                            >
+                              {emoji}
+                              {by.length > 1 && (
+                                <span className="text-xs font-semibold text-muted">
+                                  {by.length}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        },
+                      )}
+                    </div>
+                  )}
                   {!groupedWithNext && (
                     <div className="mt-0.5 px-1 text-xs text-muted">
                       {formatTime(m.createdAt)}
                     </div>
                   )}
                 </div>
-                {/* Shown on hover; always visible on touch screens, which can't hover. */}
-                <button
-                  type="button"
-                  className="mt-1.5 grid size-7 flex-none place-items-center rounded-full text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:bg-panel hover:text-fg focus-visible:opacity-100 [@media(hover:none)]:opacity-70"
-                  onClick={() => {
-                    updateReply(m);
-                    inputRef.current?.focus();
-                  }}
-                  aria-label="Reply"
-                  title="Reply"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="size-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="m9 14-5-5 5-5" />
-                    <path d="M4 9h11a5 5 0 0 1 5 5v5" />
-                  </svg>
-                </button>
+                {/* Nothing can be done with a deleted message. */}
+                {!m.deletedAt && (
+                  <>
+                    <button
+                      type="button"
+                      data-reaction-bar
+                      className={cx(
+                        messageAction,
+                        "mt-1.5",
+                        reactingId === m.id && "bg-panel text-fg opacity-100",
+                      )}
+                      onClick={() =>
+                        setReactingId((id) => (id === m.id ? null : m.id))
+                      }
+                      aria-label="React"
+                      aria-expanded={reactingId === m.id}
+                      title="React"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="size-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" />
+                        <path d="M9 9.75h.01M15 9.75h.01" strokeWidth="2.6" />
+                      </svg>
+                    </button>
+                    {/* The bar opens above the message, lined up with the bubble's
+                    outer edge so it always fits inside the chat. */}
+                    {reactingId === m.id && (
+                      <div
+                        data-reaction-bar
+                        className={cx(
+                          "absolute bottom-full z-10 mb-0.5 flex gap-0.5 rounded-full border border-line bg-panel p-1 shadow-[0_6px_24px_rgb(0_0_0/0.18)]",
+                          mine ? "right-11" : "left-11",
+                        )}
+                      >
+                        {QUICK_REACTIONS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            className={cx(
+                              "grid size-8 place-items-center rounded-full text-lg hover:bg-panel-2",
+                              m.reactions.some(
+                                (r) => r.userId === me.id && r.emoji === emoji,
+                              ) && "bg-accent-soft",
+                            )}
+                            onClick={() => void react(m, emoji)}
+                            aria-label={`React with ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        {/* Any other emoji: opens the full picker (above the message box). */}
+                        <button
+                          type="button"
+                          className="grid size-8 place-items-center rounded-full text-muted hover:bg-panel-2 hover:text-fg"
+                          onClick={() => {
+                            setReactingId(null);
+                            setEmojiTarget(m.id);
+                          }}
+                          aria-label="More emojis"
+                          title="More emojis"
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="size-4.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M12 5v14M5 12h14" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className={cx(messageAction, "mt-1.5")}
+                      onClick={() => {
+                        updateReply(m);
+                        inputRef.current?.focus();
+                      }}
+                      aria-label="Reply"
+                      title="Reply"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="size-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="m9 14-5-5 5-5" />
+                        <path d="M4 9h11a5 5 0 0 1 5 5v5" />
+                      </svg>
+                    </button>
+                    {/* Only while it's recent enough to delete. */}
+                    {mine && msBetween(m.createdAt, now) < DELETE_WINDOW_MS && (
+                      <button
+                        type="button"
+                        className={cx(
+                          messageAction,
+                          "mt-1.5 hover:text-danger",
+                        )}
+                        onClick={() => void remove(m)}
+                        aria-label="Delete"
+                        title="Delete"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="size-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           );
@@ -701,16 +952,23 @@ export default function ChatWindow({
       {/* The picker sits outside the <form>, so Enter in its search box doesn't send the message. */}
       <div ref={composerRef} className="relative">
         {emojiOpen && (
-          <div className="absolute bottom-full left-3 z-10 mb-2 w-[min(350px,calc(100%-1.5rem))] rounded-2xl shadow-[0_10px_40px_rgb(0_0_0/0.18)]">
-            <Suspense
-              fallback={
-                <div className="grid h-95 place-items-center rounded-2xl border border-line bg-panel text-muted">
-                  Loading…
-                </div>
-              }
-            >
-              <EmojiPicker onPick={insertEmoji} />
-            </Suspense>
+          <div className="absolute bottom-full left-3 z-10 mb-2 w-[min(350px,calc(100%-1.5rem))]">
+            {emojiTarget !== "draft" && (
+              <p className="mb-1 w-fit rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-white">
+                Pick a reaction for the highlighted message
+              </p>
+            )}
+            <div className="rounded-2xl shadow-[0_10px_40px_rgb(0_0_0/0.18)]">
+              <Suspense
+                fallback={
+                  <div className="grid h-95 place-items-center rounded-2xl border border-line bg-panel text-muted">
+                    Loading…
+                  </div>
+                }
+              >
+                <EmojiPicker onPick={handleEmojiPick} />
+              </Suspense>
+            </div>
           </div>
         )}
         <form
@@ -803,11 +1061,13 @@ export default function ChatWindow({
             type="button"
             className={cx(
               "grid size-10.5 flex-none place-items-center rounded-full hover:bg-panel-2 hover:text-fg",
-              emojiOpen ? "bg-panel-2 text-fg" : "text-muted",
+              emojiTarget === "draft" ? "bg-panel-2 text-fg" : "text-muted",
             )}
-            onClick={() => setEmojiOpen((open) => !open)}
+            onClick={() =>
+              setEmojiTarget((target) => (target === "draft" ? null : "draft"))
+            }
             aria-label="Emoji"
-            aria-expanded={emojiOpen}
+            aria-expanded={emojiTarget === "draft"}
             title="Emoji"
           >
             <svg

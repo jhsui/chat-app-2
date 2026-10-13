@@ -10,8 +10,26 @@ import type {
 import { COOKIE_NAME, verifyToken } from "./auth.js";
 import { isValidId, toPublicUser, type Db } from "./db.js";
 import type { Presence } from "./presence.js";
+import type { ChatImageStorage } from "./storage.js";
 
 const MAX_MESSAGE_LENGTH = 2000;
+/** How long after sending a message its sender can still delete it. */
+export const DELETE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/**
+ * True if `value` is exactly one emoji, so a reaction can't be used to attach
+ * arbitrary text to a message. One emoji can be several characters joined
+ * together (a flag, 👍🏽, 👨‍👩‍👧), which is what the grapheme check allows for.
+ */
+function isSingleEmoji(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 40)
+    return false;
+  if ([...graphemes.segment(value)].length !== 1) return false;
+  // A pictograph, a flag letter, or a keycap (as in 1️⃣).
+  return /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20E3/u.test(value);
+}
 const room = (userId: number) => `user:${userId}`;
 
 /** Data attached to each socket after the handshake is authenticated. */
@@ -41,7 +59,14 @@ export function attachSocket(
   httpServer: HttpServer,
   db: Db,
   presence: Presence,
-  { corsOrigin }: { corsOrigin?: string } = {},
+  {
+    corsOrigin,
+    chatImageStorage,
+  }: {
+    corsOrigin?: string;
+    /** Where chat pictures are kept, so a deleted message's file can be removed. */
+    chatImageStorage?: ChatImageStorage | null;
+  } = {},
 ): ChatServer {
   const io: ChatServer = new Server(httpServer, {
     cors: corsOrigin ? { origin: corsOrigin, credentials: true } : undefined,
@@ -122,6 +147,62 @@ export function attachSocket(
         }
       } catch (err) {
         console.error(err);
+      }
+    });
+
+    socket.on("message:delete", async (payload, ack) => {
+      const reply = typeof ack === "function" ? ack : () => {};
+      const messageId = Number(payload?.messageId);
+      try {
+        const result = isValidId(messageId)
+          ? await db.deleteMessage(messageId, me.id, DELETE_WINDOW_MS)
+          : null;
+        // Also the answer for someone else's message, or one already deleted.
+        if (!result) return reply({ error: "Message not found" });
+        if (result === "expired") {
+          return reply({
+            error: "Messages can only be deleted for 2 days after they're sent",
+          });
+        }
+        const { message, imageKey } = result;
+        if (imageKey) {
+          // The message is already gone for both people; a file that can't be
+          // removed right now shouldn't turn that into an error.
+          chatImageStorage
+            ?.remove(imageKey)
+            .catch((e) => console.error("Couldn't delete image", imageKey, e));
+        }
+        io.to(room(message.recipientId))
+          .to(room(message.senderId))
+          .emit("message:deleted", message);
+        reply({ ok: true });
+      } catch (err) {
+        console.error(err);
+        reply({ error: "Couldn't delete the message. Try again." });
+      }
+    });
+
+    socket.on("message:react", async (payload, ack) => {
+      const reply = typeof ack === "function" ? ack : () => {};
+      const messageId = Number(payload?.messageId);
+      const emoji = payload?.emoji ?? null;
+      if (emoji !== null && !isSingleEmoji(emoji))
+        return reply({ error: "A reaction has to be a single emoji" });
+      try {
+        const result = isValidId(messageId)
+          ? await db.setReaction(messageId, me.id, emoji)
+          : null;
+        if (!result) return reply({ error: "Message not found" });
+        io.to(room(result.senderId))
+          .to(room(result.recipientId))
+          .emit("message:reactions", {
+            messageId,
+            reactions: result.reactions,
+          });
+        reply({ ok: true });
+      } catch (err) {
+        console.error(err);
+        reply({ error: "Couldn't save the reaction. Try again." });
       }
     });
 

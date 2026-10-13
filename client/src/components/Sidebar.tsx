@@ -294,7 +294,7 @@ export default function Sidebar({
               ) : draft ? (
                 <DraftPreview text={draft} />
               ) : (
-                `${c.lastSenderId === me.id ? "You: " : ""}${c.lastIsImage ? "📷 Photo" : c.lastBody}`
+                `${c.lastSenderId === me.id ? "You: " : ""}${c.lastIsDeleted ? "Message deleted" : c.lastIsImage ? "📷 Photo" : c.lastBody}`
               );
               return (
                 <li key={c.id}>

@@ -173,6 +173,7 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
           ...current,
           lastBody: msg.body,
           lastIsImage: msg.image !== null,
+          lastIsDeleted: false,
           lastSenderId: msg.senderId,
           lastAt: msg.createdAt,
           unread: isActive ? 0 : current.unread + (incoming ? 1 : 0),
@@ -199,6 +200,30 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
           prev.map((c) => (c.id === senderId ? { ...c, unread: 0 } : c)),
         );
       }
+    });
+
+    // A message was deleted: swap in what's left of it, and empty any quotes of it.
+    socket.on("message:deleted", (deleted) => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id === deleted.id) return deleted;
+          if (m.replyTo?.id !== deleted.id) return m;
+          return {
+            ...m,
+            replyTo: { ...m.replyTo, body: "", imageUrl: null, deleted: true },
+          };
+        }),
+      );
+      // Forget a reply to it that was waiting in a chat that isn't open.
+      for (const [userId, target] of replyDraftsRef.current)
+        if (target.id === deleted.id) replyDraftsRef.current.delete(userId);
+      void refreshConversations(); // it may have been a chat's latest message
+    });
+
+    socket.on("message:reactions", ({ messageId, reactions }) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, reactions } : m)),
+      );
     });
 
     socket.on("presence", ({ userId, online }) => {
@@ -308,6 +333,41 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
     await api.sendImage(active.id, image, replyTo);
   }
 
+  // The server answers by announcing the message's new reactions to both
+  // people ("message:reactions" above), which is what updates the chat.
+  async function reactToMessage(
+    messageId: number,
+    emoji: string | null,
+  ): Promise<void> {
+    const socket = socketRef.current;
+    if (!socket?.connected)
+      throw new Error("You're offline — reaction not sent");
+    let res;
+    try {
+      res = await socket
+        .timeout(5000)
+        .emitWithAck("message:react", { messageId, emoji });
+    } catch {
+      throw new Error("Reaction timed out — try again");
+    }
+    if (!res.ok) throw new Error(res.error);
+  }
+
+  async function deleteMessage(messageId: number): Promise<void> {
+    const socket = socketRef.current;
+    if (!socket?.connected)
+      throw new Error("You're offline — message not deleted");
+    let res;
+    try {
+      res = await socket
+        .timeout(5000)
+        .emitWithAck("message:delete", { messageId });
+    } catch {
+      throw new Error("Deleting timed out — try again");
+    }
+    if (!res.ok) throw new Error(res.error);
+  }
+
   function saveDraft(userId: number, text: string) {
     if (text.trim()) draftsRef.current.set(userId, text);
     else draftsRef.current.delete(userId);
@@ -371,6 +431,8 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
             if (message) replyDraftsRef.current.set(active.id, message);
             else replyDraftsRef.current.delete(active.id);
           }}
+          onReact={reactToMessage}
+          onDelete={deleteMessage}
           onTyping={sendTyping}
           onBack={closeConversation}
           onShowProfile={() => setProfileId(active.id)}
