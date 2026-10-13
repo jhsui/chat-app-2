@@ -5,6 +5,7 @@ import http from "node:http";
 import path from "node:path";
 import { requireAuth } from "./auth.js";
 import { openDb, type Db, type DbConfig } from "./db.js";
+import { fetchLinkPreview, type LinkPreviewFetcher } from "./linkPreview.js";
 import { createPresence } from "./presence.js";
 import { attachSocket, emitNewMessage, type ChatServer } from "./socket.js";
 import { authRoutes } from "./routes/auth.js";
@@ -23,6 +24,11 @@ export interface ServerOptions {
   avatarStorage?: AvatarStorage | null;
   /** Where pictures sent in chats go (a private bucket). Same default. */
   chatImageStorage?: ChatImageStorage | null;
+  /**
+   * Looks up previews for links in messages. Defaults to downloading the linked
+   * page (see linkPreview.ts); null turns link previews off.
+   */
+  linkPreviews?: LinkPreviewFetcher | null;
   clientDist?: string;
   corsOrigin?: string;
 }
@@ -43,6 +49,7 @@ export async function createServer({
   db: dbConfig,
   avatarStorage = storageFromEnv(),
   chatImageStorage = chatImageStorageFromEnv(),
+  linkPreviews = fetchLinkPreview,
   clientDist,
   corsOrigin,
 }: ServerOptions): Promise<ChatApp> {
@@ -53,6 +60,7 @@ export async function createServer({
   const io = attachSocket(httpServer, db, presence, {
     corsOrigin,
     chatImageStorage,
+    linkPreviews,
   });
 
   app.disable("x-powered-by");

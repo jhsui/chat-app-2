@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import pg from "pg";
 import type {
+  LinkPreview,
   Message,
   Profile,
   PublicUser,
@@ -65,6 +66,9 @@ const SCHEMA = `
   -- the row, so the chat can show "This message was deleted" in its place.
   ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
+  -- Preview (title, description, picture) of the first link in the text.
+  ALTER TABLE messages ADD COLUMN IF NOT EXISTS link_preview JSONB;
+
   -- Emoji reactions. The primary key allows one per person per message.
   CREATE TABLE IF NOT EXISTS reactions (
     message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
@@ -97,6 +101,7 @@ const MESSAGE_COLUMNS = `
   ${reactionsOf("m.id")} AS reactions,
   m.id, m.sender_id AS "senderId", m.recipient_id AS "recipientId", m.body,
   m.created_at AS "createdAt", m.read_at AS "readAt", m.deleted_at AS "deletedAt",
+  m.link_preview AS "linkPreview",
   (m.image_key IS NOT NULL) AS "hasImage", m.image_width AS "imageWidth", m.image_height AS "imageHeight",
   r.id AS "replyId", r.sender_id AS "replySenderId", left(r.body, 200) AS "replyBody",
   (r.image_key IS NOT NULL) AS "replyHasImage", (r.deleted_at IS NOT NULL) AS "replyDeleted"
@@ -171,6 +176,8 @@ export interface Db {
     options?: { before?: number; limit?: number },
   ): Promise<Message[]>;
   getConversations(me: number): Promise<ConversationRow[]>;
+  /** Saves the preview of a message's link. False if the message is gone (deleted meanwhile). */
+  setLinkPreview(messageId: number, preview: LinkPreview): Promise<boolean>;
   /**
    * Deletes a message for both people: empties it and removes its reactions,
    * leaving a placeholder. Only its sender can, and only until the message is
@@ -515,6 +522,15 @@ export async function openDb(config: DbConfig): Promise<Db> {
       return rows.map((r) => ({ ...r, lastAt: iso(r.lastAt) }));
     },
 
+    async setLinkPreview(messageId, preview) {
+      const { rowCount } = await sql.query(
+        `UPDATE messages SET link_preview = $2::jsonb
+         WHERE id = $1 AND deleted_at IS NULL`,
+        [messageId, JSON.stringify(preview)],
+      );
+      return rowCount > 0;
+    },
+
     async deleteMessage(messageId, userId, maxAgeMs) {
       // Only the sender can delete, only once, and only for a while. The age is
       // worked out by the database, so it doesn't depend on any other clock.
@@ -534,7 +550,7 @@ export async function openDb(config: DbConfig): Promise<Db> {
         `WITH old AS (SELECT image_key FROM messages WHERE id = $1),
          m AS (
            UPDATE messages
-           SET deleted_at = now(), body = '', reply_to_id = NULL,
+           SET deleted_at = now(), body = '', reply_to_id = NULL, link_preview = NULL,
                image_key = NULL, image_width = NULL, image_height = NULL
            WHERE id = $1 AND sender_id = $2 AND deleted_at IS NULL
            RETURNING *

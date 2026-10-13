@@ -9,8 +9,10 @@ import {
   type ClipboardEvent,
   type SubmitEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 import type {
+  LinkPreview,
   Message,
   MessageImage,
   PublicUser,
@@ -140,6 +142,88 @@ function Ticks({ message }: { message: Message }) {
         <path d="M20 6 9 17l-5-5" />
       )}
     </svg>
+  );
+}
+
+// Same pattern as findFirstUrl on the server, which picks the link to preview.
+const LINK_PATTERN = /https?:\/\/[^\s<>"']+/gi;
+
+function isUrl(text: string): boolean {
+  try {
+    new URL(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A message's text, with the web addresses in it turned into links. */
+function MessageText({ text, onAccent }: { text: string; onAccent: boolean }) {
+  const parts: ReactNode[] = [];
+  let end = 0;
+  for (const match of text.matchAll(LINK_PATTERN)) {
+    // Punctuation right after a link ("see https://a.example/b.") isn't part of it.
+    const url = match[0].replace(/[.,!?;:)\]}]+$/, "");
+    if (!isUrl(url)) continue;
+    parts.push(
+      text.slice(end, match.index),
+      <a
+        key={match.index}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={cx(
+          "underline underline-offset-2",
+          !onAccent && "text-accent",
+        )}
+      >
+        {url}
+      </a>,
+    );
+    end = match.index + url.length;
+  }
+  parts.push(text.slice(end));
+  return <>{parts}</>;
+}
+
+/** The card under a message for the web page it links to. Clicking it opens the page. */
+function LinkPreviewCard({ preview }: { preview: LinkPreview }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const host = isUrl(preview.url)
+    ? new URL(preview.url).hostname.replace(/^www\./, "")
+    : "";
+  return (
+    <a
+      href={preview.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-0.5 block w-72 max-w-full overflow-hidden rounded-[14px] border border-line bg-panel hover:border-accent"
+    >
+      {/* A fixed height, so the chat doesn't jump when the picture loads. The
+          picture comes straight from the other site; no-referrer keeps this
+          app's address out of that request. */}
+      {preview.imageUrl && !imageFailed && (
+        <img
+          src={preview.imageUrl}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          className="h-36 w-full bg-bubble object-cover"
+          onError={() => setImageFailed(true)}
+        />
+      )}
+      <span className="block px-3 py-2">
+        <span className="block truncate text-xs text-muted">
+          {preview.siteName ?? host}
+        </span>
+        <span className="line-clamp-2 font-semibold">{preview.title}</span>
+        {preview.description && (
+          <span className="line-clamp-2 text-sm text-muted">
+            {preview.description}
+          </span>
+        )}
+      </span>
+    </a>
   );
 }
 
@@ -725,7 +809,7 @@ export default function ChatWindow({
                       title={formatDateTime(m.createdAt)}
                     >
                       {quote && <div className="mb-1.5">{quote}</div>}
-                      {m.body}
+                      <MessageText text={m.body} onAccent={mine} />
                       {mine && (
                         <>
                           {/* An empty space at the end of the text keeps the last
@@ -738,6 +822,7 @@ export default function ChatWindow({
                       )}
                     </div>
                   )}
+                  {m.linkPreview && <LinkPreviewCard preview={m.linkPreview} />}
                   {m.reactions.length > 0 && (
                     <div className="mt-0.5 flex gap-1">
                       {/* One chip per emoji; clicking it gives (or takes back) the same reaction. */}

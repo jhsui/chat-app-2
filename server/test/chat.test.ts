@@ -57,11 +57,28 @@ const fakeChatImages = {
   },
 };
 
+/** Stand-in for downloading linked pages: only knows one site, and records what it was asked. */
+const fakeLinkPreviews = {
+  asked: [] as string[],
+  async fetch(url: string) {
+    fakeLinkPreviews.asked.push(url);
+    if (!url.startsWith("https://news.test/")) return null;
+    return {
+      url,
+      title: "Big news",
+      description: "It happened.",
+      imageUrl: "https://news.test/photo.jpg",
+      siteName: "News",
+    };
+  },
+};
+
 before(async () => {
   server = await createServer({
     db: await testDbConfig(),
     avatarStorage: fakeStorage,
     chatImageStorage: fakeChatImages,
+    linkPreviews: fakeLinkPreviews.fetch,
   });
   await new Promise<void>((resolve) => server.httpServer.listen(0, resolve));
   baseUrl = `http://localhost:${(server.httpServer.address() as AddressInfo).port}`;
@@ -877,11 +894,76 @@ test("deleting a message empties it for both people and removes its picture", as
   bSock.disconnect();
 });
 
+test("a link in a message gets a preview shortly after it's sent", async () => {
+  const bobId: number = (await bob.request("GET", "/api/auth/me")).body.user.id;
+  const aliceId: number = (await alice.request("GET", "/api/auth/me")).body.user
+    .id;
+  const aSock = await socketFor(alice);
+  const bSock = await socketFor(bob);
+  const lastMessage = async () =>
+    (await bob.request("GET", `/api/messages/${aliceId}`)).body.messages.at(-1);
+
+  // The message arrives straight away without the preview; the preview follows.
+  const bobTold = once(bSock, "message:preview");
+  const aliceTold = once(aSock, "message:preview");
+  const ack = await aSock.emitWithAck("message:send", {
+    to: bobId,
+    body: "have you seen https://news.test/story?id=7. wow",
+  });
+  assert.ok(ack.ok);
+  assert.equal(ack.message.linkPreview, null);
+  const expected = {
+    messageId: ack.message.id,
+    preview: {
+      url: "https://news.test/story?id=7",
+      title: "Big news",
+      description: "It happened.",
+      imageUrl: "https://news.test/photo.jpg",
+      siteName: "News",
+    },
+  };
+  assert.deepEqual(await bobTold, expected);
+  assert.deepEqual(await aliceTold, expected);
+
+  // It's saved with the message, and removed when the message is deleted.
+  assert.deepEqual((await lastMessage()).linkPreview, expected.preview);
+  await aSock.emitWithAck("message:delete", { messageId: ack.message.id });
+  assert.equal((await lastMessage()).linkPreview, null);
+
+  // A link with nothing to show, and a message without a link.
+  fakeLinkPreviews.asked.length = 0;
+  await aSock.emitWithAck("message:send", {
+    to: bobId,
+    body: "https://nothing.test/",
+  });
+  await aSock.emitWithAck("message:send", { to: bobId, body: "no link" });
+  // The third message's preview arriving means the first two were dealt with.
+  // (Listen before sending: the preview can arrive right behind the message.)
+  const lastPreview = once(bSock, "message:preview");
+  const third = await aSock.emitWithAck("message:send", {
+    to: bobId,
+    body: "https://news.test/again",
+  });
+  assert.ok(third.ok && (await lastPreview).messageId === third.message.id);
+  assert.deepEqual(fakeLinkPreviews.asked, [
+    "https://nothing.test/",
+    "https://news.test/again",
+  ]);
+  const history = (await bob.request("GET", `/api/messages/${aliceId}`)).body
+    .messages;
+  assert.equal(history.at(-3).linkPreview, null);
+  assert.equal(history.at(-2).linkPreview, null);
+
+  aSock.disconnect();
+  bSock.disconnect();
+});
+
 test("uploads explain when storage isn't configured", async () => {
   const bare = await createServer({
     db: { pgliteDir: "memory://" },
     avatarStorage: null,
     chatImageStorage: null,
+    linkPreviews: null,
   });
   await new Promise<void>((resolve) => bare.httpServer.listen(0, resolve));
   const url = `http://localhost:${(bare.httpServer.address() as AddressInfo).port}`;

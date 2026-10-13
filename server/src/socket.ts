@@ -9,6 +9,7 @@ import type {
 } from "../../shared/types.js";
 import { COOKIE_NAME, verifyToken } from "./auth.js";
 import { isValidId, toPublicUser, type Db } from "./db.js";
+import { findFirstUrl, type LinkPreviewFetcher } from "./linkPreview.js";
 import type { Presence } from "./presence.js";
 import type { ChatImageStorage } from "./storage.js";
 
@@ -62,10 +63,13 @@ export function attachSocket(
   {
     corsOrigin,
     chatImageStorage,
+    linkPreviews,
   }: {
     corsOrigin?: string;
     /** Where chat pictures are kept, so a deleted message's file can be removed. */
     chatImageStorage?: ChatImageStorage | null;
+    /** Looks up previews for links in messages; leave out to turn previews off. */
+    linkPreviews?: LinkPreviewFetcher | null;
   } = {},
 ): ChatServer {
   const io: ChatServer = new Server(httpServer, {
@@ -86,6 +90,25 @@ export function attachSocket(
       next(new Error("server error"));
     }
   });
+
+  /**
+   * If a message has a link in it, looks up the link's preview and tells both
+   * people once it's ready. This runs after the message has been delivered,
+   * so a slow website never holds up a message.
+   */
+  async function addLinkPreview(message: Message) {
+    const url = linkPreviews && findFirstUrl(message.body);
+    if (!url) return;
+    try {
+      const preview = await linkPreviews(url);
+      if (!preview || !(await db.setLinkPreview(message.id, preview))) return;
+      io.to(room(message.recipientId))
+        .to(room(message.senderId))
+        .emit("message:preview", { messageId: message.id, preview });
+    } catch (err) {
+      console.error("Couldn't add a link preview", err);
+    }
+  }
 
   io.on("connection", (socket) => {
     const me = socket.data.user;
@@ -120,6 +143,7 @@ export function attachSocket(
           });
           emitNewMessage(io, message);
           reply({ ok: true, message });
+          void addLinkPreview(message);
         } catch (err) {
           console.error(err);
           reply({ error: "Couldn't send the message. Try again." });

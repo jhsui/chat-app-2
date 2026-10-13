@@ -220,6 +220,15 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
       void refreshConversations(); // it may have been a chat's latest message
     });
 
+    // The preview for a link in a message that's already on screen is ready.
+    socket.on("message:preview", ({ messageId, preview }) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, linkPreview: preview } : m,
+        ),
+      );
+    });
+
     socket.on("message:reactions", ({ messageId, reactions }) => {
       setMessages((prev) =>
         prev.map((m) => (m.id === messageId ? { ...m, reactions } : m)),

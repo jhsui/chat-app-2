@@ -17,6 +17,7 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 - **Replies:** hover a message (or tap the arrow on a phone) to reply to it; the reply shows a quote of the original, and clicking the quote jumps to it
 - **Reactions:** react to any message with 👍 ❤️ 😂 😮 😢 🙏, or any other emoji from the full picker via "+" (one per person per message; pick it again to take it back). They appear under the message for both people straight away
 - **Delete:** remove a message you sent, for both people, up to 2 days after sending it. It leaves a "This message was deleted" placeholder, and a deleted picture's file is removed from storage
+- **Link previews:** links in messages are clickable, and the first one gets a card with the page's title, description and picture
 - Emoji picker in the message box, with search, categories and skin tones ([emoji-picker-react](https://github.com/ealush/emoji-picker-react), downloaded the first time it's opened)
 - Per-chat drafts: unsent text stays with its chat when you switch, with a "Draft: …" preview in the sidebar (kept until you reload)
 - Message history with "load older" pagination
@@ -89,6 +90,14 @@ Chat images go in the private `chat-images` bucket, under `<sender id>/`:
 - **Privacy:** files in a private bucket have no public URL. A message's `image.url` is `/api/images/<message id>` on this server, which checks the login cookie and only sends the file to the sender and the recipient (anyone else gets a 404). The server fetches the file from Supabase with the secret key and passes it on.
 - Browsers keep their copy (`Cache-Control: private, immutable`), so each picture is fetched through the server once per device, not on every visit.
 
+## Link previews
+
+When a text message contains a link, the server downloads that page once and reads its title, description and picture from the page's `<meta>` tags (Open Graph). The message is delivered first; the preview follows a moment later as a `message:preview` event and is saved with the message.
+
+- **The server only fetches public web pages.** Fetching an address a user typed could otherwise be used to reach things only the server can see (`http://localhost`, a private network, a cloud provider's metadata address). `server/src/linkPreview.ts` refuses anything that isn't `http(s)` on the standard ports, checks the IP address it actually connects to, re-checks every redirect, and gives up after 5 seconds or 2 MB (it stops reading at the end of the page's `<head>`, which is usually much sooner).
+- **Preview pictures load from the other site**, straight into each person's browser, so that site sees their IP address when the card is shown (as it would if they opened the link). The request doesn't include this app's address.
+- Set `LINK_PREVIEWS=off` in `server/.env` to turn previews off; links stay clickable.
+
 ## Scripts (run from the project root)
 
 | Command             | What it does                                                                                 |
@@ -151,6 +160,7 @@ chat-app/
 │   │   ├── auth.ts          JWT cookie helpers + requireAuth middleware
 │   │   ├── socket.ts        real-time events
 │   │   ├── presence.ts      online tracking
+│   │   ├── linkPreview.ts   downloads a linked page (safely) and reads its title/description/picture
 │   │   ├── storage.ts       Supabase Storage for avatars and chat images + image type check
 │   │   └── routes/          auth.ts (register/login/logout/me), chat.ts (users, conversations, messages, send/serve images),
 │   │                        profile.ts (view/edit profile, upload/remove avatar)
@@ -170,15 +180,16 @@ chat-app/
 
 ## Socket events
 
-| Client → server  | Payload                              | Server → client     | Payload                                    |
-| ---------------- | ------------------------------------ | ------------------- | ------------------------------------------ |
-| `message:send`   | `{ to, body, replyTo? }` + ack       | `message:new`       | `Message`                                  |
-| `typing`         | `{ to, typing }`                     | `typing`            | `{ from, typing }`                         |
-| `messages:read`  | `{ from }`                           | `messages:read`     | `{ readerId, senderId, upToId }`           |
-| `message:delete` | `{ messageId }` + ack                | `message:deleted`   | `Message` (what's left: see `deletedAt`)   |
-| `message:react`  | `{ messageId, emoji \| null }` + ack | `message:reactions` | `{ messageId, reactions }` (the full list) |
-|                  |                                      | `presence`          | `{ userId, online }`                       |
-|                  |                                      | `profile:updated`   | `PublicUser` (new name/avatar)             |
+| Client → server  | Payload                              | Server → client     | Payload                                                           |
+| ---------------- | ------------------------------------ | ------------------- | ----------------------------------------------------------------- |
+| `message:send`   | `{ to, body, replyTo? }` + ack       | `message:new`       | `Message`                                                         |
+| `typing`         | `{ to, typing }`                     | `typing`            | `{ from, typing }`                                                |
+| `messages:read`  | `{ from }`                           | `messages:read`     | `{ readerId, senderId, upToId }`                                  |
+| `message:delete` | `{ messageId }` + ack                | `message:deleted`   | `Message` (what's left: see `deletedAt`)                          |
+|                  |                                      | `message:preview`   | `{ messageId, preview }` (a sent message's link preview is ready) |
+| `message:react`  | `{ messageId, emoji \| null }` + ack | `message:reactions` | `{ messageId, reactions }` (the full list)                        |
+|                  |                                      | `presence`          | `{ userId, online }`                                              |
+|                  |                                      | `profile:updated`   | `PublicUser` (new name/avatar)                                    |
 
 Image messages are sent with `POST /api/messages/:userId/image?width=…&height=…` (the image bytes as the body, ≤ 1 MB) and arrive as a `message:new` whose `image` is `{ url, width, height }`. The `url` is `GET /api/images/:messageId`, which serves the file to the sender and recipient only.
 

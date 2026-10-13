@@ -41,6 +41,18 @@ export interface ReplyPreview {
   deleted: boolean;
 }
 
+/** A summary of the web page a message links to, shown as a card under it. */
+export interface LinkPreview {
+  /** The link, as it appears in the message. */
+  url: string;
+  title: string;
+  description: string | null;
+  /** A picture for the page, on the page's own site (not ours). */
+  imageUrl: string | null;
+  /** The site's name, e.g. "YouTube". */
+  siteName: string | null;
+}
+
 /** One person's reaction to a message. Each person has at most one per message. */
 export interface Reaction {
   userId: number;
@@ -58,12 +70,17 @@ export interface Message {
   image: MessageImage | null;
   /** The earlier message in this conversation that this one replies to, if any. */
   replyTo: ReplyPreview | null;
+  /**
+   * Preview of the first link in the text, if it has one. It's looked up after
+   * the message is sent, so it arrives a moment later (see "message:preview").
+   */
+  linkPreview: LinkPreview | null;
   /** Oldest first. */
   reactions: Reaction[];
   /**
    * ISO 8601 timestamp of when the sender deleted the message, or null. A
    * deleted message keeps its place in the chat but has nothing in it: body is
-   * "", image and replyTo are null, and reactions is empty.
+   * "", image, replyTo and linkPreview are null, and reactions is empty.
    */
   deletedAt: string | null;
   /** ISO 8601 timestamp */
@@ -168,6 +185,11 @@ export interface ServerToClientEvents {
     readerId: number;
     senderId: number;
     upToId: number;
+  }) => void;
+  /** The preview for a link in a message that was sent a moment ago is ready. */
+  "message:preview": (payload: {
+    messageId: number;
+    preview: LinkPreview;
   }) => void;
   /** A message was deleted; this is what's left of it (see Message.deletedAt). */
   "message:deleted": (message: Message) => void;
