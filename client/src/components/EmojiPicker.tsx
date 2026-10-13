@@ -1,3 +1,4 @@
+import { useAppearance } from "../theme.tsx";
 import type { CSSProperties } from "react";
 import Picker, { EmojiStyle, Theme } from "emoji-picker-react";
 
@@ -34,14 +35,15 @@ const style = {
  * (and the emoji data that comes with it) only when it's first opened.
  */
 export default function EmojiPicker({ onPick }: EmojiPickerProps) {
+  const { resolvedTheme } = useAppearance();
   return (
     <Picker
       onEmojiClick={(data) => onPick(data.emoji)}
       // The device's own emoji font, not images downloaded from a CDN.
       emojiStyle={EmojiStyle.NATIVE}
-      theme={Theme.AUTO}
+      theme={resolvedTheme === "dark" ? Theme.DARK : Theme.LIGHT}
       width="100%"
-      height={380}
+      height="min(380px, calc(100dvh - 170px))"
       previewConfig={{ showPreview: false }}
       autoFocusSearch={false}
       style={style}

@@ -9,19 +9,20 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 - Sign up / sign in with username and password (passwords hashed with bcrypt)
 - **Chats | People** tabs in the sidebar: People lists every user, online first, then by most recent chat
 - **Profiles:** upload an avatar (cropped and resized in the browser, stored in Supabase Storage), set a display name and a short bio, and view other people's profiles. Changes show up live for everyone
-- Search for people by username or display name and start a conversation
+- Filter existing conversations in **Chats**, or use **New chat / People** to find someone by username or display name
 - Messages arrive instantly over WebSockets and are saved to PostgreSQL
 - **Images:** attach a picture with the image button or paste one from the clipboard; it's shrunk in the browser, stored in a private Supabase Storage bucket that only the two people in the conversation can load from, and opens full-size when clicked
 - Conversation list sorted by latest message, with unread badges
 - Online / offline status, typing indicator, and read receipts: one tick on each message you've sent, two blue ticks once it's been seen
-- **Replies:** hover a message (or tap the arrow on a phone) to reply to it; the reply shows a quote of the original, and clicking the quote jumps to it
+- **Replies:** hover a message (or open its **…** menu on a phone) to reply to it; the reply shows a quote of the original, and clicking the quote jumps to it
 - **Reactions:** react to any message with 👍 ❤️ 😂 😮 😢 🙏, or any other emoji from the full picker via "+" (one per person per message; pick it again to take it back). They appear under the message for both people straight away
 - **Delete:** remove a message you sent, for both people, up to 2 days after sending it. It leaves a "This message was deleted" placeholder, and a deleted picture's file is removed from storage
 - **Link previews:** links in messages are clickable, and the first one gets a card with the page's title, description and picture
 - Emoji picker in the message box, with search, categories and skin tones ([emoji-picker-react](https://github.com/ealush/emoji-picker-react), downloaded the first time it's opened)
 - Per-chat drafts: unsent text stays with its chat when you switch, with a "Draft: …" preview in the sidebar (kept until you reload)
 - Message history with "load older" pagination
-- Works across multiple tabs, reconnects automatically, light/dark mode, mobile layout
+- Works across multiple tabs, reconnects automatically, light/dark/system appearance with a saved preference, and a mobile layout
+- Responsive messaging workspace, keyboard-accessible tabs, reduced-motion support, loading skeletons, and a **Latest messages** shortcut when reading history
 
 ## Getting started
 
@@ -113,8 +114,8 @@ To run it like production on one port: `npm run build && JWT_SECRET=something-lo
 ## Styling (Tailwind CSS v4)
 
 - Styles are Tailwind utility classes written directly in the JSX. Tailwind runs as a Vite plugin (`@tailwindcss/vite`), so there's no separate config file or PostCSS setup.
-- **Theme tokens** live in `client/src/styles.css`: colors are CSS variables on `:root`, swapped for dark mode by `@media (prefers-color-scheme: dark)`, and exposed to Tailwind through `@theme`. That gives custom utilities like `bg-panel`, `bg-chat`, `text-muted`, `border-line`, `bg-accent`, `bg-bubble`, so components don't need `dark:` variants for colors. To change the accent color, edit `--accent` and `--accent-2` (the two ends of the gradient on your own bubbles and the main buttons). The same file defines the shadows (`shadow-bubble`, `shadow-card`, `shadow-pop`) and the page background.
-- **Colors are written in OKLCH** (`oklch(lightness chroma hue)`), so shades are evenly spaced and contrast is predictable. `--fill` / `--fill-2` are the gradient that sits under white text (your own bubbles, main buttons, badges); they're kept dark enough in both themes for white text to pass WCAG AA (4.5:1). `--accent` is for accent-colored text and outlines, and is lighter in dark mode.
+- **Theme tokens** live in `client/src/styles.css`: colors are CSS variables on `:root`, swapped for dark mode by `[data-theme="dark"]`, and exposed to Tailwind through `@theme`. That gives custom utilities like `bg-panel`, `bg-chat`, `text-muted`, `border-line`, `bg-accent`, `bg-bubble`, so components don't need `dark:` variants for colors. Use `--accent` for links and selection highlights; `--fill` and `--fill-2` control the gradient on your own bubbles and primary buttons. The same file defines the shadows (`shadow-bubble`, `shadow-card`, `shadow-pop`) and the page background.
+- **Appearance:** `client/src/theme.tsx` provides light, dark, and system modes. The appearance menu offers all three modes and saves the preference in local storage, synchronized across browser tabs. CSS uses semantic color variables for both themes, and animations respect `prefers-reduced-motion`. Shared layouts, message controls, and auth illustrations are in `styles.css`.
 - **Font:** Figtree, loaded from the `@fontsource-variable/figtree` package, so the font files are served by the app itself and it looks the same on every device. To change it, swap the two `@import` lines and `--font-sans` in `styles.css`.
 - **Icons:** [Lucide](https://lucide.dev) (`lucide-react`). Import the ones you need by name, e.g. `import { Send } from "lucide-react"`; only those end up in the bundle.
 - `md` is set to 720px: below it (`max-md:`), the app shows one pane at a time.

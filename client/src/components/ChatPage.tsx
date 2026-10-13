@@ -14,7 +14,6 @@ import type { ChatImage } from "../image.ts";
 import Sidebar from "./Sidebar.tsx";
 import ChatWindow from "./ChatWindow.tsx";
 import ProfileDialog from "./ProfileDialog.tsx";
-import { cx } from "../ui.ts";
 
 type ChatSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -402,14 +401,8 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
 
   return (
     // On wide screens the app is a rounded card floating on the page background.
-    <div className="h-full lg:p-4">
-      <div
-        className={cx(
-          "mx-auto grid h-full max-w-300 grid-cols-[330px_1fr] overflow-hidden bg-panel",
-          "md:border-x md:border-line lg:rounded-3xl lg:border lg:shadow-card",
-          "max-md:grid-cols-1",
-        )}
-      >
+    <div className="app-stage">
+      <div className="app-shell">
         <Sidebar
           me={me}
           conversations={conversations}
@@ -430,6 +423,7 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
             me={me}
             user={active}
             online={isOnline(active)}
+            connected={connected}
             typing={Boolean(typing[active.id])}
             messages={messages}
             hasMore={hasMore}
@@ -451,16 +445,34 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
             onShowProfile={() => setProfileId(active.id)}
           />
         ) : (
-          <section className="grid place-items-center bg-chat p-8 text-center max-md:hidden">
-            <div className="max-w-96">
-              <div className="mx-auto grid size-20 place-items-center rounded-full bg-accent-soft text-accent">
-                <MessageCircleMore className="size-9" strokeWidth={1.7} />
+          <section className="relative grid place-items-center overflow-hidden bg-chat p-8 text-center max-md:hidden">
+            <div className="max-w-100 animate-pop">
+              <div className="empty-orbit" aria-hidden="true">
+                <div className="grid size-22 place-items-center rounded-[28px] bg-linear-to-br from-fill to-fill-2 text-white shadow-pop">
+                  <MessageCircleMore className="size-10" strokeWidth={1.6} />
+                </div>
+                <span className="orbit-note text-sm">
+                  Hey there <span>👋</span>
+                </span>
+                <span className="orbit-note text-sm">
+                  <span className="size-2 rounded-full bg-online" /> Let's catch
+                  up.
+                </span>
               </div>
-              <h2 className="mt-5 mb-1.5 text-xl font-bold">Your messages</h2>
-              <p className="text-muted">
-                Pick a conversation, or search for a username to start a new
-                one.
+              <p className="eyebrow mb-3">Your space to connect</p>
+              <h2 className="text-3xl font-bold tracking-tight">
+                Good conversations
+                <br />
+                start with a hello.
+              </h2>
+              <p className="mx-auto mt-4 max-w-75 text-sm leading-relaxed text-muted">
+                Choose a conversation, or explore People to make a new
+                connection.
               </p>
+              <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-line bg-panel px-4 py-2 text-xs text-muted">
+                <span className="size-1.5 rounded-full bg-online" /> Real-time.
+                Just you and your people.
+              </div>
             </div>
           </section>
         )}

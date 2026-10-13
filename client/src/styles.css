@@ -1,61 +1,51 @@
 @import "tailwindcss";
-/* Figtree, from Fontsource: the font files ship with the app (no request to a
-   font CDN), and one variable file covers every weight. */
 @import "@fontsource-variable/figtree/wght.css";
 @import "@fontsource-variable/figtree/wght-italic.css";
 
-/*
- * Design tokens. Light values first, dark values swapped in by the media query,
- * so components never need `dark:` variants for colors. The @theme block below
- * turns each token into Tailwind utilities: bg-panel, text-muted, border-line, …
- */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 :root {
-  /* Colors are written in OKLCH (lightness, chroma, hue), which keeps the
-     neutrals evenly spaced and makes contrast predictable. All the neutrals
-     share the accent's hue, very faintly, so nothing looks plain gray. */
-  --app-bg: oklch(0.955 0.014 285); /* behind the app, on wide screens */
-  --panel: oklch(1 0 0); /* sidebar, headers, cards */
-  --panel-2: oklch(0.972 0.007 285); /* inputs, hovered rows */
-  --chat: oklch(0.963 0.009 285); /* behind the messages */
-  --line: oklch(0.925 0.011 285);
-  --fg: oklch(0.23 0.035 280);
-  --muted: oklch(0.54 0.035 280);
-  --accent: oklch(0.54 0.22 278); /* links, selected things, focus rings */
-  --accent-2: oklch(0.58 0.21 297);
-  --accent-hover: oklch(0.49 0.22 278);
-  --accent-soft: oklch(0.955 0.024 288);
-  /* The gradient under white text (my bubbles, main buttons, badges). Kept
-     dark enough in both themes for white text to pass WCAG AA (4.5:1). */
-  --fill: oklch(0.54 0.22 278);
-  --fill-2: oklch(0.57 0.22 298);
-  --bubble: oklch(1 0 0); /* the other person's bubbles */
-  --danger: oklch(0.58 0.22 27);
-  --online: oklch(0.72 0.19 150);
+  --app-bg: #eaf0f8;
+  --panel: #ffffff;
+  --panel-2: #f1f4f9;
+  --chat: #f8fafd;
+  --line: #e4e9f1;
+  --fg: #192338;
+  --muted: #65738a;
+  --accent: #315de5;
+  --accent-2: #5578ef;
+  --accent-hover: #214bc8;
+  --accent-soft: #eaf0ff;
+  --fill: #3866ed;
+  --fill-2: #2953d0;
+  --bubble: #ffffff;
+  --danger: #c73550;
+  --online: #168565;
+  --sidebar: #fcfdff;
+  --ambient: #c2d3f4;
   color-scheme: light;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --app-bg: oklch(0.145 0.016 280);
-    --panel: oklch(0.205 0.02 280);
-    --panel-2: oklch(0.25 0.024 280);
-    --chat: oklch(0.17 0.018 280);
-    --line: oklch(0.3 0.026 280);
-    --fg: oklch(0.95 0.008 285);
-    --muted: oklch(0.7 0.03 280);
-    --accent: oklch(0.72 0.14 282);
-    --accent-2: oklch(0.76 0.13 300);
-    --accent-hover: oklch(0.78 0.12 282);
-    --accent-soft: oklch(0.3 0.075 283);
-    --fill: oklch(0.53 0.22 278);
-    --fill-2: oklch(0.56 0.22 298);
-    --bubble: oklch(0.27 0.027 280);
-    --danger: oklch(0.73 0.16 25);
-    --online: oklch(0.74 0.19 150);
-    color-scheme: dark;
-  }
+:root[data-theme="dark"] {
+  --app-bg: #080d17;
+  --panel: #131c2c;
+  --panel-2: #1b2639;
+  --chat: #0e1726;
+  --line: #253147;
+  --fg: #edf2fb;
+  --muted: #98a7bf;
+  --accent: #91b0ff;
+  --accent-2: #a2c4ff;
+  --accent-hover: #bad0ff;
+  --accent-soft: #223656;
+  --fill: #3866ed;
+  --fill-2: #2953d0;
+  --bubble: #1b283d;
+  --danger: #ff8da3;
+  --online: #52d5ac;
+  --sidebar: #111a2a;
+  --ambient: #1c315b;
+  color-scheme: dark;
 }
-
 @theme inline {
   --color-app: var(--app-bg);
   --color-panel: var(--panel);
@@ -74,38 +64,32 @@
   --color-danger: var(--danger);
   --color-online: var(--online);
 }
-
 @theme {
   --font-sans:
     "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    Roboto, sans-serif;
-
-  /* Below this width the app shows one pane at a time (sidebar or chat). */
-  --breakpoint-md: 45rem; /* 720px */
-
-  /* Shadows: a hairline under bubbles and chips, a soft one around the app, a
-     stronger one under things that float (menus, pickers, dialogs). */
-  --shadow-bubble: 0 1px 2px rgb(20 24 60 / 0.08);
-  --shadow-card:
-    0 24px 60px rgb(20 24 60 / 0.1), 0 2px 6px rgb(20 24 60 / 0.04);
-  --shadow-pop: 0 12px 36px rgb(10 12 40 / 0.2), 0 2px 6px rgb(10 12 40 / 0.08);
-
-  /* Menus and pickers appearing. */
-  --animate-pop: pop 0.14s ease-out;
+    sans-serif;
+  --breakpoint-md: 45rem;
+  --shadow-bubble: 0 2px 6px rgb(10 25 60 / 0.04);
+  --shadow-card: 0 28px 90px -30px rgb(0 12 40 / 0.3);
+  --shadow-pop:
+    0 18px 50px -12px rgb(0 8 30 / 0.35), 0 0 0 1px rgb(100 140 200 / 0.05);
+  --animate-pop: pop 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-blink: blink 1.4s infinite ease-in-out;
   @keyframes pop {
     from {
       opacity: 0;
-      transform: translateY(4px) scale(0.97);
+      transform: translateY(7px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
     }
   }
-
-  /* Typing indicator dots. */
-  --animate-blink: blink 1.2s infinite ease-in-out;
   @keyframes blink {
     0%,
     80%,
     100% {
-      opacity: 0.3;
+      opacity: 0.35;
       transform: translateY(0);
     }
     40% {
@@ -114,11 +98,10 @@
     }
   }
 }
-
 @layer base {
   html {
-    font-size: 15px;
-    line-height: 1.45;
+    font-size: 16px;
+    line-height: 1.5;
   }
   html,
   body,
@@ -126,30 +109,433 @@
     height: 100%;
   }
   body {
-    /* Two faint glows in the accent colors, so the page isn't a flat gray. */
+    margin: 0;
     background:
-      radial-gradient(
-        60rem 36rem at 0% 0%,
-        color-mix(in srgb, var(--accent) 14%, transparent),
-        transparent 70%
-      ),
-      radial-gradient(
-        50rem 32rem at 100% 100%,
-        color-mix(in srgb, var(--accent-2) 12%, transparent),
-        transparent 70%
-      ),
-      var(--color-app);
-    background-attachment: fixed;
-    color: var(--color-fg);
+      radial-gradient(ellipse at 10% 0%, var(--ambient), transparent 55%),
+      var(--app-bg);
+    color: var(--fg);
     -webkit-font-smoothing: antialiased;
   }
-  /* Slim, quiet scrollbars. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--muted) 35%, transparent)
+    scrollbar-color: color-mix(in srgb, var(--muted) 25%, transparent)
       transparent;
   }
-  button:not(:disabled) {
+  button:not(:disabled),
+  [role="tab"] {
     cursor: pointer;
+  }
+  button,
+  a,
+  input,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+}
+@layer components {
+  .app-stage {
+    height: 100dvh;
+    padding: 20px;
+  }
+  .app-shell {
+    display: grid;
+    grid-template-columns: 328px minmax(0, 1fr);
+    height: 100%;
+    max-width: 1560px;
+    margin: auto;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    background: var(--panel);
+    box-shadow: var(--shadow-card);
+  }
+  .sidebar {
+    background: var(--sidebar);
+  }
+  .brand-mark {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex: none;
+    place-items: center;
+    border: 1px solid rgb(255 255 255 / 0.2);
+    border-radius: 12px;
+    color: white;
+    background: linear-gradient(145deg, #638bff, #305bdf);
+    box-shadow:
+      0 4px 12px rgb(56 102 237 / 0.2),
+      inset 0 1px 0 rgb(255 255 255 / 0.2);
+  }
+  .eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .conversation-row {
+    position: relative;
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 12px;
+    padding: 15px 12px;
+    border: 1px solid transparent;
+    border-radius: 15px;
+    text-align: left;
+    transition:
+      background 160ms,
+      border-color 160ms,
+      transform 160ms;
+  }
+  .conversation-row:hover {
+    background: var(--panel-2);
+    transform: translateX(2px);
+  }
+  .conversation-row[data-active="true"] {
+    background: linear-gradient(
+      110deg,
+      var(--accent-soft),
+      color-mix(in srgb, var(--accent-soft) 60%, var(--sidebar))
+    );
+    border-color: color-mix(in srgb, var(--accent) 19%, transparent);
+  }
+  .conversation-row[data-active="true"]::before {
+    content: "";
+    position: absolute;
+    left: -1px;
+    height: 22px;
+    width: 3px;
+    border-radius: 4px;
+    background: var(--accent);
+  }
+  .chat-conversation {
+    container-type: inline-size;
+  }
+  .chat-header {
+    backdrop-filter: blur(20px);
+    background: color-mix(in srgb, var(--panel) 90%, transparent);
+  }
+  .message-list {
+    background-color: var(--chat);
+    background-image: radial-gradient(
+      ellipse at 100% 0%,
+      color-mix(in srgb, var(--accent) 4%, transparent),
+      transparent 60%
+    );
+    padding: 24px clamp(16px, 3.2vw, 52px);
+    overscroll-behavior: contain;
+  }
+  .message-entry {
+    animation: message-in 220ms ease-out;
+  }
+  .message-bubble {
+    border: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+  }
+  .message-bubble-own {
+    border: 1px solid rgb(255 255 255 / 0.1);
+    box-shadow: 0 3px 9px rgb(36 77 186 / 0.1);
+  }
+  .composer {
+    padding: 16px clamp(16px, 3.2vw, 52px)
+      max(12px, env(safe-area-inset-bottom));
+    background: var(--chat);
+  }
+  .composer-field {
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: var(--panel);
+    padding: 8px;
+    box-shadow: 0 6px 24px rgb(0 15 50 / 0.04);
+    transition:
+      border-color 180ms,
+      box-shadow 180ms;
+  }
+  .composer-field:focus-within {
+    border-color: color-mix(in srgb, var(--accent) 65%, var(--line));
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent),
+      0 6px 24px rgb(0 15 50 / 0.04);
+  }
+  .send-button {
+    box-shadow: 0 4px 12px rgb(56 102 237 / 0.24);
+  }
+  .send-button:hover:enabled {
+    transform: translateY(-2px);
+  }
+  .send-button:active:enabled {
+    transform: scale(0.94);
+  }
+  .send-button:disabled {
+    background: var(--panel-2);
+    color: var(--muted);
+    box-shadow: none;
+    opacity: 0.65;
+  }
+  .message-actions {
+    position: absolute;
+    top: 0;
+    right: -2px;
+    transform: translateY(-85%);
+    z-index: 2;
+    padding: 3px;
+    border-radius: 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow-bubble);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity 140ms,
+      transform 140ms;
+  }
+  .group:hover > .message-actions,
+  .message-actions:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(-100%);
+  }
+  .floating-menu {
+    position: fixed;
+    z-index: 80;
+    padding: 8px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: var(--panel);
+    color: var(--fg);
+    box-shadow: var(--shadow-pop);
+    animation: pop 160ms ease-out;
+  }
+  .floating-menu button:focus-visible {
+    outline-offset: -3px;
+  }
+  .menu-action {
+    display: flex;
+    width: 100%;
+    min-height: 44px;
+    align-items: center;
+    gap: 12px;
+    border-radius: 12px;
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 150ms;
+  }
+  .menu-action:hover {
+    background: var(--panel-2);
+  }
+  .link-card {
+    transition:
+      border-color 180ms,
+      transform 180ms;
+  }
+  .link-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .empty-orbit {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 240px;
+    height: 240px;
+    margin: 0 auto 24px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--accent-soft), transparent 68%);
+  }
+  .empty-orbit::before {
+    content: "";
+    position: absolute;
+    inset: 28px;
+    border: 1px dashed color-mix(in srgb, var(--accent) 30%, transparent);
+    border-radius: 50%;
+  }
+  .orbit-note {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 12px 17px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 15px;
+    box-shadow: var(--shadow-pop);
+    animation: float 6s ease-in-out infinite;
+  }
+  .orbit-note:first-of-type {
+    left: -20px;
+    top: 30px;
+    transform: rotate(-8deg);
+  }
+  .orbit-note:last-of-type {
+    right: -25px;
+    bottom: 32px;
+    animation-delay: -3s;
+  }
+  .auth-layout {
+    display: grid;
+    min-height: 100dvh;
+    grid-template-columns: 1.1fr 1fr;
+    max-width: 1600px;
+    margin: auto;
+    padding: 28px;
+    gap: 28px;
+  }
+  .auth-story {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: clamp(30px, 4vw, 56px);
+    border: 1px solid rgb(255 255 255 / 0.1);
+    border-radius: 28px;
+    background: #101d36;
+    color: #f0f5ff;
+  }
+  .auth-story::before {
+    content: "";
+    position: absolute;
+    width: 650px;
+    height: 650px;
+    left: 10%;
+    top: 12%;
+    border-radius: 50%;
+    background: radial-gradient(circle, #284b92 0%, transparent 67%);
+    opacity: 0.65;
+  }
+  .auth-story::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(#9fb4e1 0.7px, transparent 0.7px);
+    background-size: 28px 28px;
+    opacity: 0.09;
+    pointer-events: none;
+  }
+  .auth-form {
+    animation: pop 450ms ease-out;
+  }
+  .auth-preview {
+    position: relative;
+    margin: 32px 0;
+    max-width: 360px;
+  }
+  .auth-preview > div {
+    animation: float 7s ease-in-out infinite;
+  }
+  .auth-preview > div:nth-child(2) {
+    animation-delay: -3s;
+  }
+  .profile-dialog::backdrop {
+    background: rgb(5 12 26 / 0.65);
+    backdrop-filter: blur(8px);
+  }
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--panel-2) 25%,
+      var(--line) 50%,
+      var(--panel-2) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s infinite;
+  }
+}
+@keyframes float {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -7px;
+  }
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (hover: none) {
+  .message-actions {
+    position: static;
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+  .group:hover > .message-actions {
+    transform: none;
+  }
+}
+@media (max-width: 1100px) {
+  .app-stage {
+    padding: 12px;
+  }
+  .app-shell {
+    grid-template-columns: 290px minmax(0, 1fr);
+    border-radius: 20px;
+  }
+}
+@media (max-width: 719px) {
+  .app-stage {
+    padding: 0;
+  }
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+    border: 0;
+    border-radius: 0;
+  }
+  .message-list {
+    padding: 20px 14px;
+  }
+  .composer {
+    padding: 8px 12px max(10px, env(safe-area-inset-bottom));
+  }
+  .composer-field {
+    border-radius: 18px;
+    padding: 5px;
+  }
+  .auth-layout {
+    display: block;
+    padding: 24px;
+  }
+  .auth-story {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
