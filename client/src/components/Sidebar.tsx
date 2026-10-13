@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { LogOut, Search } from "lucide-react";
 import type {
   Conversation,
   Person,
@@ -34,7 +35,7 @@ interface SidebarProps {
 const row = {
   item: (active: boolean) =>
     cx(
-      "flex w-full items-center gap-3 rounded-xl p-2.5 text-left",
+      "flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition-colors",
       active ? "bg-accent-soft" : "hover:bg-panel-2",
     ),
   text: "flex min-w-0 flex-1 flex-col gap-0.5",
@@ -42,10 +43,10 @@ const row = {
   title: "truncate font-semibold",
   sub: (unread: boolean) =>
     cx("truncate text-sm", unread ? "font-semibold text-fg" : "text-muted"),
-  time: "flex-none text-xs text-muted",
+  time: "flex-none text-[0.72rem] text-muted",
   typing: "text-accent",
   section:
-    "px-2.5 pt-3 pb-1 text-xs font-bold tracking-wider text-muted uppercase",
+    "px-2.5 pt-4 pb-1.5 text-[0.7rem] font-bold tracking-widest text-muted uppercase",
   empty: "px-4 py-6 text-center text-sm text-muted",
 };
 
@@ -62,7 +63,7 @@ function UnreadBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span
-      className="grid h-5 min-w-5 flex-none place-items-center rounded-full bg-accent px-1.5 text-[0.72rem] font-bold text-white"
+      className="grid h-5 min-w-5 flex-none place-items-center rounded-full bg-linear-to-br from-fill to-fill-2 px-1.5 text-[0.72rem] font-bold text-white"
       aria-label={`${count} unread`}
     >
       {count > 99 ? "99+" : count}
@@ -158,27 +159,27 @@ export default function Sidebar({
 
   const tabClass = (selected: boolean) =>
     cx(
-      "-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 pt-2 pb-2.5 font-semibold",
+      "inline-flex flex-1 items-center justify-center gap-1.5 rounded-[10px] py-1.5 text-sm font-semibold transition-colors",
       selected
-        ? "border-accent text-accent"
-        : "border-transparent text-muted hover:text-fg",
+        ? "bg-panel text-fg shadow-bubble dark:bg-white/10"
+        : "text-muted hover:text-fg",
     );
 
   return (
     // On narrow screens the sidebar hides while a chat is open.
     <aside
       className={cx(
-        "flex min-h-0 flex-col border-r border-line",
+        "flex min-h-0 flex-col border-line bg-panel md:border-r",
         activeId !== undefined && "max-md:hidden",
       )}
     >
       <header className={cx(ui.header, "justify-between")}>
         <button
-          className="-m-1.5 flex min-w-0 items-center gap-2.5 rounded-xl p-1.5 text-left hover:bg-panel-2"
+          className="-m-1.5 flex min-w-0 items-center gap-3 rounded-xl p-1.5 text-left transition-colors hover:bg-panel-2"
           onClick={onShowProfile}
           aria-label="Your profile"
         >
-          <Avatar name={nameOf(me)} src={me.avatarUrl} size={36} />
+          <Avatar name={nameOf(me)} src={me.avatarUrl} size={40} />
           <div className={ui.nameBlock}>
             <strong className="truncate">{nameOf(me)}</strong>
             <span className={ui.status}>
@@ -189,13 +190,19 @@ export default function Sidebar({
             </span>
           </div>
         </button>
-        <button className={ui.btnGhost} onClick={onLogout}>
-          Log out
+        <button
+          className={cx(ui.iconBtn, "size-9.5")}
+          onClick={onLogout}
+          aria-label="Log out"
+          title="Log out"
+        >
+          <LogOut className="size-5" />
         </button>
       </header>
 
+      {/* A two-way switch: the selected side is a raised white pill. */}
       <div
-        className="flex gap-1 border-b border-line px-4 pt-2.5"
+        className="mx-4 mt-3.5 flex gap-1 rounded-[13px] bg-panel-2 p-1"
         role="tablist"
         aria-label="Sidebar"
       >
@@ -216,7 +223,7 @@ export default function Sidebar({
           People
           {onlineCount > 0 && (
             <span
-              className="inline-grid h-4.5 min-w-5 place-items-center rounded-full bg-online/20 px-1.5 text-xs font-bold text-green-700 dark:text-green-300"
+              className="inline-grid h-4.5 min-w-5 place-items-center rounded-full bg-online/20 px-1.5 text-[0.7rem] font-bold text-green-700 dark:text-green-300"
               aria-label={`${onlineCount} online`}
             >
               {onlineCount}
@@ -225,10 +232,11 @@ export default function Sidebar({
         </button>
       </div>
 
-      <div className="px-4 pt-3 pb-2">
+      <div className="relative px-4 pt-3 pb-2">
+        <Search className="pointer-events-none absolute top-1/2 left-7.5 mt-0.5 size-4.5 -translate-y-1/2 text-muted" />
         <input
           type="search"
-          className={ui.input}
+          className={cx(ui.input, "border-transparent pl-10")}
           placeholder={tab === "chats" ? "Search people…" : "Filter people…"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -240,7 +248,7 @@ export default function Sidebar({
         />
       </div>
 
-      <ul className="flex-1 overflow-y-auto px-2 pt-1 pb-4" role="tabpanel">
+      <ul className="flex-1 overflow-y-auto px-2.5 pt-1 pb-4" role="tabpanel">
         {tab === "people" ? (
           <PeopleList
             people={sortPeople(
@@ -272,6 +280,7 @@ export default function Sidebar({
                     name={nameOf(u)}
                     src={u.avatarUrl}
                     online={isOnline(u)}
+                    size={44}
                   />
                   <span className={row.text}>
                     <span className={row.title}>{nameOf(u)}</span>
@@ -307,6 +316,7 @@ export default function Sidebar({
                       name={nameOf(c)}
                       src={c.avatarUrl}
                       online={isOnline(c)}
+                      size={44}
                     />
                     <span className={row.text}>
                       <span className={row.line}>
@@ -383,7 +393,7 @@ function PeopleList({
           data-name={p.username}
           onClick={() => onSelect(p)}
         >
-          <Avatar name={nameOf(p)} src={p.avatarUrl} online={isOn} />
+          <Avatar name={nameOf(p)} src={p.avatarUrl} online={isOn} size={44} />
           <span className={row.text}>
             <span className={row.line}>
               <span className={row.title}>{nameOf(p)}</span>

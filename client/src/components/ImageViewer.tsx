@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { X } from "lucide-react";
 import type { MessageImage } from "../../../shared/types";
 
 interface ImageViewerProps {
@@ -32,10 +33,10 @@ export default function ImageViewer({ image, onClose }: ImageViewerProps) {
         className="h-auto max-h-[90dvh] w-auto max-w-[92vw] rounded-lg object-contain"
       />
       <button
-        className="fixed top-3 right-4 grid size-10 place-items-center rounded-full bg-black/50 text-2xl leading-none text-white hover:bg-black/70"
+        className="fixed top-3 right-4 grid size-10 place-items-center rounded-full bg-black/50 text-white hover:bg-black/70"
         aria-label="Close"
       >
-        ×
+        <X className="size-5.5" />
       </button>
     </dialog>
   );

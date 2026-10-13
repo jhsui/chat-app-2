@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { MessageCircleMore } from "lucide-react";
 import { io, type Socket } from "socket.io-client";
 import type {
   ClientToServerEvents,
@@ -400,80 +401,81 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
     online[user.id] ?? user.online ?? false;
 
   return (
-    <div
-      className={cx(
-        "mx-auto grid h-full max-w-300 grid-cols-[320px_1fr] border-x border-line bg-panel",
-        "max-md:grid-cols-1 max-md:border-0",
-      )}
-    >
-      <Sidebar
-        me={me}
-        conversations={conversations}
-        people={people}
-        drafts={draftsRef.current}
-        onShowPeople={refreshPeople}
-        activeId={active?.id}
-        typing={typing}
-        isOnline={isOnline}
-        connected={connected}
-        onSelect={openConversation}
-        onShowProfile={() => setProfileId(me.id)}
-        onLogout={handleLogout}
-      />
-      {active ? (
-        <ChatWindow
-          key={active.id}
+    // On wide screens the app is a rounded card floating on the page background.
+    <div className="h-full lg:p-4">
+      <div
+        className={cx(
+          "mx-auto grid h-full max-w-300 grid-cols-[330px_1fr] overflow-hidden bg-panel",
+          "md:border-x md:border-line lg:rounded-3xl lg:border lg:shadow-card",
+          "max-md:grid-cols-1",
+        )}
+      >
+        <Sidebar
           me={me}
-          user={active}
-          online={isOnline(active)}
-          typing={Boolean(typing[active.id])}
-          messages={messages}
-          hasMore={hasMore}
-          loading={loading}
-          onLoadOlder={loadOlder}
-          onSend={sendMessage}
-          onSendImage={sendImage}
-          initialDraft={draftsRef.current.get(active.id) ?? ""}
-          onDraftChange={(text) => saveDraft(active.id, text)}
-          initialReplyTo={replyDraftsRef.current.get(active.id) ?? null}
-          onReplyChange={(message) => {
-            if (message) replyDraftsRef.current.set(active.id, message);
-            else replyDraftsRef.current.delete(active.id);
-          }}
-          onReact={reactToMessage}
-          onDelete={deleteMessage}
-          onTyping={sendTyping}
-          onBack={closeConversation}
-          onShowProfile={() => setProfileId(active.id)}
-        />
-      ) : (
-        <section className="grid place-items-center bg-panel-2 p-8 text-center max-md:hidden">
-          <div>
-            <img
-              src="/favicon.svg"
-              alt=""
-              width="56"
-              height="56"
-              className="mx-auto"
-            />
-            <h2 className="mt-4 mb-1.5 text-2xl font-bold">Your messages</h2>
-            <p className="text-muted">
-              Pick a conversation, or search for a username to start a new one.
-            </p>
-          </div>
-        </section>
-      )}
-      {profileId !== null && (
-        <ProfileDialog
-          key={profileId}
-          userId={profileId}
-          me={me}
+          conversations={conversations}
+          people={people}
+          drafts={draftsRef.current}
+          onShowPeople={refreshPeople}
+          activeId={active?.id}
+          typing={typing}
           isOnline={isOnline}
-          onClose={() => setProfileId(null)}
-          onProfileSaved={(profile) => onMeChange(publicUser(profile))}
-          onMessage={openConversation}
+          connected={connected}
+          onSelect={openConversation}
+          onShowProfile={() => setProfileId(me.id)}
+          onLogout={handleLogout}
         />
-      )}
+        {active ? (
+          <ChatWindow
+            key={active.id}
+            me={me}
+            user={active}
+            online={isOnline(active)}
+            typing={Boolean(typing[active.id])}
+            messages={messages}
+            hasMore={hasMore}
+            loading={loading}
+            onLoadOlder={loadOlder}
+            onSend={sendMessage}
+            onSendImage={sendImage}
+            initialDraft={draftsRef.current.get(active.id) ?? ""}
+            onDraftChange={(text) => saveDraft(active.id, text)}
+            initialReplyTo={replyDraftsRef.current.get(active.id) ?? null}
+            onReplyChange={(message) => {
+              if (message) replyDraftsRef.current.set(active.id, message);
+              else replyDraftsRef.current.delete(active.id);
+            }}
+            onReact={reactToMessage}
+            onDelete={deleteMessage}
+            onTyping={sendTyping}
+            onBack={closeConversation}
+            onShowProfile={() => setProfileId(active.id)}
+          />
+        ) : (
+          <section className="grid place-items-center bg-chat p-8 text-center max-md:hidden">
+            <div className="max-w-96">
+              <div className="mx-auto grid size-20 place-items-center rounded-full bg-accent-soft text-accent">
+                <MessageCircleMore className="size-9" strokeWidth={1.7} />
+              </div>
+              <h2 className="mt-5 mb-1.5 text-xl font-bold">Your messages</h2>
+              <p className="text-muted">
+                Pick a conversation, or search for a username to start a new
+                one.
+              </p>
+            </div>
+          </section>
+        )}
+        {profileId !== null && (
+          <ProfileDialog
+            key={profileId}
+            userId={profileId}
+            me={me}
+            isOnline={isOnline}
+            onClose={() => setProfileId(null)}
+            onProfileSaved={(profile) => onMeChange(publicUser(profile))}
+            onMessage={openConversation}
+          />
+        )}
+      </div>
     </div>
   );
 }

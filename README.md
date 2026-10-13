@@ -2,7 +2,7 @@
 
 A real-time chat web app with user accounts and private 1:1 direct messages.
 
-**Stack:** TypeScript everywhere · React 19 + Vite · Tailwind CSS v4 · Node.js + Express 5 · Socket.IO · PostgreSQL (node-postgres, PGlite for local dev) · bcrypt + JWT (httpOnly cookie)
+**Stack:** TypeScript everywhere · React 19 + Vite · Tailwind CSS v4 · Lucide icons · Figtree (self-hosted via Fontsource) · Node.js + Express 5 · Socket.IO · PostgreSQL (node-postgres, PGlite for local dev) · bcrypt + JWT (httpOnly cookie)
 
 ## Features
 
@@ -113,7 +113,10 @@ To run it like production on one port: `npm run build && JWT_SECRET=something-lo
 ## Styling (Tailwind CSS v4)
 
 - Styles are Tailwind utility classes written directly in the JSX. Tailwind runs as a Vite plugin (`@tailwindcss/vite`), so there's no separate config file or PostCSS setup.
-- **Theme tokens** live in `client/src/styles.css`: colors are CSS variables on `:root`, swapped for dark mode by `@media (prefers-color-scheme: dark)`, and exposed to Tailwind through `@theme`. That gives custom utilities like `bg-panel`, `text-muted`, `border-line`, `bg-accent`, `bg-bubble`, so components don't need `dark:` variants for colors. To change the accent color, edit `--accent` in one place.
+- **Theme tokens** live in `client/src/styles.css`: colors are CSS variables on `:root`, swapped for dark mode by `@media (prefers-color-scheme: dark)`, and exposed to Tailwind through `@theme`. That gives custom utilities like `bg-panel`, `bg-chat`, `text-muted`, `border-line`, `bg-accent`, `bg-bubble`, so components don't need `dark:` variants for colors. To change the accent color, edit `--accent` and `--accent-2` (the two ends of the gradient on your own bubbles and the main buttons). The same file defines the shadows (`shadow-bubble`, `shadow-card`, `shadow-pop`) and the page background.
+- **Colors are written in OKLCH** (`oklch(lightness chroma hue)`), so shades are evenly spaced and contrast is predictable. `--fill` / `--fill-2` are the gradient that sits under white text (your own bubbles, main buttons, badges); they're kept dark enough in both themes for white text to pass WCAG AA (4.5:1). `--accent` is for accent-colored text and outlines, and is lighter in dark mode.
+- **Font:** Figtree, loaded from the `@fontsource-variable/figtree` package, so the font files are served by the app itself and it looks the same on every device. To change it, swap the two `@import` lines and `--font-sans` in `styles.css`.
+- **Icons:** [Lucide](https://lucide.dev) (`lucide-react`). Import the ones you need by name, e.g. `import { Send } from "lucide-react"`; only those end up in the bundle.
 - `md` is set to 720px: below it (`max-md:`), the app shows one pane at a time.
 - **Shared classes** used in several components (buttons, inputs, headers) are strings in `client/src/ui.ts`; `cx()` joins class names conditionally.
 - Tip: the official "Tailwind CSS IntelliSense" VS Code extension gives autocomplete and hover previews for class names.

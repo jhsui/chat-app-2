@@ -5,6 +5,7 @@ import {
   type ChangeEvent,
   type SubmitEvent,
 } from "react";
+import { X } from "lucide-react";
 import type { Profile, PublicUser } from "../../../shared/types";
 import { api, errorMessage } from "../api.ts";
 import { nameOf } from "../format.ts";
@@ -74,16 +75,16 @@ export default function ProfileDialog({
         e.target === dialogRef.current && dialogRef.current?.close()
       }
       aria-label={isMe ? "Your profile" : "Profile"}
-      className="m-auto w-[min(420px,calc(100%-2rem))] rounded-[20px] border border-line bg-panel p-0 text-fg shadow-[0_20px_60px_rgb(0_0_0/0.25)] backdrop:bg-black/40"
+      className="m-auto w-[min(420px,calc(100%-2rem))] animate-pop rounded-3xl border border-line bg-panel p-0 text-fg shadow-pop backdrop:bg-black/45 backdrop:backdrop-blur-[2px]"
     >
       <div className="flex items-center justify-between border-b border-line px-5 py-3">
         <h2 className="font-bold">{isMe ? "Your profile" : "Profile"}</h2>
         <button
-          className={cx(ui.btnGhost, "text-xl leading-none")}
+          className={cx(ui.iconBtn, "-mr-1.5 size-9")}
           onClick={() => dialogRef.current?.close()}
           aria-label="Close"
         >
-          ×
+          <X className="size-5" />
         </button>
       </div>
 

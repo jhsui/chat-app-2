@@ -11,6 +11,18 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import {
+  Check,
+  CheckCheck,
+  ChevronLeft,
+  Image as ImageIcon,
+  Plus,
+  Reply as ReplyIcon,
+  Send,
+  Smile as SmileIcon,
+  Trash2 as TrashIcon,
+  X,
+} from "lucide-react";
 import type {
   LinkPreview,
   Message,
@@ -40,10 +52,16 @@ const MAX_MESSAGE_LENGTH = 2000;
 const DELETE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
 /** The reactions offered straight away on a message; "+" opens the full picker for any other emoji. */
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
-// Look of the small round buttons beside a message (react, reply). They show on
-// hover, and are always visible on touch screens, which can't hover.
+// Look of the small round buttons beside a message (react, reply, delete).
+// They show on hover. Touch screens can't hover: there only the react button
+// is shown (always), and the bar it opens offers reply and delete too.
 const messageAction =
-  "grid size-7 flex-none place-items-center rounded-full text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:bg-panel hover:text-fg focus-visible:opacity-100 [@media(hover:none)]:opacity-70";
+  "grid size-7.5 flex-none place-items-center rounded-full text-muted opacity-0 transition group-hover:opacity-100 hover:bg-panel hover:text-fg hover:shadow-bubble focus-visible:opacity-100 [@media(hover:none)]:opacity-60";
+const onlyWithHover = "[@media(hover:none)]:hidden";
+const onlyOnTouch = "[@media(hover:hover)]:hidden";
+// The image and emoji buttons inside the message box.
+const composerButton =
+  "grid size-9.5 flex-none place-items-center rounded-full text-muted transition-colors hover:enabled:bg-line/70 hover:enabled:text-fg disabled:opacity-50";
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 /** Size of the avatar beside each run of messages, in pixels. */
@@ -91,7 +109,7 @@ function ImageBubble({
   return (
     <button
       type="button"
-      className="block max-w-full overflow-hidden rounded-[18px] bg-bubble"
+      className="block max-w-full overflow-hidden rounded-[20px] bg-panel-2 shadow-bubble"
       title={title}
       onClick={onOpen}
       aria-label="View image"
@@ -120,28 +138,16 @@ function Ticks({ message }: { message: Message }) {
   const label = message.readAt
     ? `Seen ${formatDateTime(message.readAt)}`
     : `Sent ${formatDateTime(message.createdAt)}`;
+  const Icon = seen ? CheckCheck : Check;
   return (
-    <svg
-      viewBox="0 0 24 24"
+    <Icon
       role="img"
       aria-label={label}
-      className={cx("size-4", seen ? "text-sky-300" : "text-white/70")}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      strokeWidth={2.4}
+      className={cx("size-4", seen ? "text-sky-300" : "text-white/75")}
     >
       <title>{label}</title>
-      {seen ? (
-        <>
-          <path d="M18 6 7 17l-5-5" />
-          <path d="m22 10-7.5 7.5L13 16" />
-        </>
-      ) : (
-        <path d="M20 6 9 17l-5-5" />
-      )}
-    </svg>
+    </Icon>
   );
 }
 
@@ -197,7 +203,7 @@ function LinkPreviewCard({ preview }: { preview: LinkPreview }) {
       href={preview.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="mt-0.5 block w-72 max-w-full overflow-hidden rounded-[14px] border border-line bg-panel hover:border-accent"
+      className="mt-1 block w-72 max-w-full overflow-hidden rounded-2xl border border-line bg-panel shadow-bubble transition-colors hover:border-accent"
     >
       {/* A fixed height, so the chat doesn't jump when the picture loads. The
           picture comes straight from the other site; no-referrer keeps this
@@ -208,7 +214,7 @@ function LinkPreviewCard({ preview }: { preview: LinkPreview }) {
           alt=""
           loading="lazy"
           referrerPolicy="no-referrer"
-          className="h-36 w-full bg-bubble object-cover"
+          className="h-36 w-full bg-panel-2 object-cover"
           onError={() => setImageFailed(true)}
         />
       )}
@@ -392,6 +398,18 @@ export default function ChatWindow({
     scrollState.current = { ...s, firstId, lastId, height: el.scrollHeight };
   }, [messages, me.id]);
 
+  // Same when the list itself gets shorter or taller: the reply bar or a
+  // picture appearing above the text box, the window being resized.
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      if (scrollState.current.nearBottom) el.scrollTop = el.scrollHeight;
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   // Show the typing bubble without hiding the latest message.
   useLayoutEffect(() => {
     const el = listRef.current;
@@ -444,6 +462,11 @@ export default function ChatWindow({
     replyRef.current = message;
     setReplyingTo(message);
     onReplyChange(message);
+  }
+
+  function startReply(message: Message) {
+    updateReply(message);
+    inputRef.current?.focus();
   }
 
   /** Scrolls to a quoted message and highlights it briefly, if it's among the loaded messages. */
@@ -661,14 +684,14 @@ export default function ChatWindow({
     <section className="flex min-h-0 min-w-0 flex-col">
       <header className={ui.header}>
         <button
-          className={cx(ui.btnGhost, "text-xl md:hidden")}
+          className={cx(ui.iconBtn, "-ml-1.5 size-9.5 md:hidden")}
           onClick={onBack}
           aria-label="Back to conversations"
         >
-          ←
+          <ChevronLeft className="size-6" />
         </button>
         <button
-          className="-m-1.5 flex min-w-0 items-center gap-3 rounded-xl p-1.5 text-left hover:bg-panel-2"
+          className="-m-1.5 flex min-w-0 items-center gap-3 rounded-xl p-1.5 text-left transition-colors hover:bg-panel-2"
           onClick={onShowProfile}
           aria-label={`View ${nameOf(user)}'s profile`}
         >
@@ -676,11 +699,20 @@ export default function ChatWindow({
             name={nameOf(user)}
             src={user.avatarUrl}
             online={online}
-            size={38}
+            size={40}
           />
           <div className={ui.nameBlock}>
             <strong className="truncate">{nameOf(user)}</strong>
-            <span className={ui.status}>
+            <span
+              className={cx(
+                "text-xs",
+                typing
+                  ? "font-medium text-accent"
+                  : online
+                    ? "text-green-600 dark:text-green-400"
+                    : "text-muted",
+              )}
+            >
               {typing ? "typing…" : online ? "Online" : "Offline"}
             </span>
           </div>
@@ -689,7 +721,7 @@ export default function ChatWindow({
 
       {/* The first child's auto top margin keeps short conversations pinned to the bottom. */}
       <div
-        className="flex flex-1 flex-col overflow-y-auto bg-panel-2 px-5 py-4 *:first:mt-auto"
+        className="flex flex-1 flex-col overflow-y-auto bg-chat px-5 py-4 *:first:mt-auto"
         ref={listRef}
         onScroll={handleScroll}
       >
@@ -724,8 +756,10 @@ export default function ChatWindow({
             isSameDay(m.createdAt, next.createdAt) &&
             msBetween(m.createdAt, next.createdAt) < GROUP_GAP_MS;
           const bubbleTone = mine
-            ? "rounded-br-md bg-accent text-white"
-            : "rounded-bl-md bg-bubble";
+            ? "rounded-br-md bg-linear-to-br from-fill to-fill-2 text-white"
+            : "rounded-bl-md bg-bubble shadow-bubble";
+          const canDelete =
+            mine && msBetween(m.createdAt, now) < DELETE_WINDOW_MS;
           const quote = m.replyTo && (
             <ReplyQuote
               reply={m.replyTo}
@@ -738,8 +772,8 @@ export default function ChatWindow({
           return (
             <div key={m.id}>
               {newDay && (
-                <div className="mt-4 mb-2 flex justify-center">
-                  <span className="rounded-full border border-line bg-panel px-2.5 py-0.5 text-xs font-semibold text-muted">
+                <div className="mt-5 mb-3 flex justify-center">
+                  <span className="rounded-full bg-panel px-3 py-1 text-[0.7rem] font-semibold text-muted shadow-bubble">
                     {formatDay(m.createdAt)}
                   </span>
                 </div>
@@ -750,7 +784,7 @@ export default function ChatWindow({
                 data-message-id={m.id}
                 className={cx(
                   "group relative -mx-2 flex items-start gap-2 rounded-xl px-2 transition-colors duration-500",
-                  groupedWithPrev ? "mt-0.5" : "mt-2.5",
+                  groupedWithPrev ? "mt-0.5" : "mt-3",
                   mine && "flex-row-reverse",
                   (m.id === highlightId || m.id === emojiTarget) &&
                     "bg-accent-soft",
@@ -768,7 +802,7 @@ export default function ChatWindow({
                 >
                   {m.deletedAt ? (
                     <div
-                      className="rounded-[18px] border border-line px-3 py-2 text-muted italic"
+                      className="rounded-[20px] border border-dashed border-line px-3.5 py-2 text-sm text-muted italic"
                       title={`Deleted ${formatDateTime(m.deletedAt)}`}
                     >
                       {mine
@@ -780,7 +814,7 @@ export default function ChatWindow({
                       {quote && (
                         <div
                           className={cx(
-                            "mb-0.5 max-w-full rounded-[18px] p-1.5",
+                            "mb-0.5 max-w-full rounded-[20px] p-1.5",
                             bubbleTone,
                           )}
                         >
@@ -803,7 +837,7 @@ export default function ChatWindow({
                   ) : (
                     <div
                       className={cx(
-                        "relative rounded-[18px] px-3 py-2 whitespace-pre-wrap wrap-anywhere",
+                        "relative rounded-[20px] px-3.5 py-2 whitespace-pre-wrap wrap-anywhere",
                         bubbleTone,
                       )}
                       title={formatDateTime(m.createdAt)}
@@ -824,7 +858,7 @@ export default function ChatWindow({
                   )}
                   {m.linkPreview && <LinkPreviewCard preview={m.linkPreview} />}
                   {m.reactions.length > 0 && (
-                    <div className="mt-0.5 flex gap-1">
+                    <div className="mt-1 flex gap-1">
                       {/* One chip per emoji; clicking it gives (or takes back) the same reaction. */}
                       {[...new Set(m.reactions.map((r) => r.emoji))].map(
                         (emoji) => {
@@ -840,10 +874,10 @@ export default function ChatWindow({
                               key={emoji}
                               type="button"
                               className={cx(
-                                "flex items-center gap-1 rounded-full border px-1.5 py-px text-sm",
+                                "flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm shadow-bubble transition-transform hover:scale-105",
                                 byMe
-                                  ? "border-accent bg-accent-soft"
-                                  : "border-line bg-panel",
+                                  ? "border-accent/60 bg-accent-soft"
+                                  : "border-transparent bg-panel",
                               )}
                               onClick={() => void react(m, emoji)}
                               title={who}
@@ -863,7 +897,7 @@ export default function ChatWindow({
                     </div>
                   )}
                   {!groupedWithNext && (
-                    <div className="mt-0.5 px-1 text-xs text-muted">
+                    <div className="mt-1 px-1 text-[0.7rem] text-muted">
                       {formatTime(m.createdAt)}
                     </div>
                   )}
@@ -871,43 +905,62 @@ export default function ChatWindow({
                 {/* Nothing can be done with a deleted message. */}
                 {!m.deletedAt && (
                   <>
-                    <button
-                      type="button"
-                      data-reaction-bar
+                    <div
                       className={cx(
-                        messageAction,
-                        "mt-1.5",
-                        reactingId === m.id && "bg-panel text-fg opacity-100",
+                        "mt-1 flex flex-none items-center",
+                        mine && "flex-row-reverse",
                       )}
-                      onClick={() =>
-                        setReactingId((id) => (id === m.id ? null : m.id))
-                      }
-                      aria-label="React"
-                      aria-expanded={reactingId === m.id}
-                      title="React"
                     >
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="size-4"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
+                      <button
+                        type="button"
+                        data-reaction-bar
+                        className={cx(
+                          messageAction,
+                          reactingId === m.id &&
+                            "bg-panel text-fg opacity-100 shadow-bubble",
+                        )}
+                        onClick={() =>
+                          setReactingId((id) => (id === m.id ? null : m.id))
+                        }
+                        aria-label="React"
+                        aria-expanded={reactingId === m.id}
+                        title="React"
                       >
-                        <circle cx="12" cy="12" r="9" />
-                        <path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" />
-                        <path d="M9 9.75h.01M15 9.75h.01" strokeWidth="2.6" />
-                      </svg>
-                    </button>
+                        <SmileIcon className="size-4.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className={cx(messageAction, onlyWithHover)}
+                        onClick={() => startReply(m)}
+                        aria-label="Reply"
+                        title="Reply"
+                      >
+                        <ReplyIcon className="size-4.5" />
+                      </button>
+                      {/* Only while it's recent enough to delete. */}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          className={cx(
+                            messageAction,
+                            onlyWithHover,
+                            "hover:text-danger",
+                          )}
+                          onClick={() => void remove(m)}
+                          aria-label="Delete"
+                          title="Delete"
+                        >
+                          <TrashIcon className="size-4.5" />
+                        </button>
+                      )}
+                    </div>
                     {/* The bar opens above the message, lined up with the bubble's
-                    outer edge so it always fits inside the chat. */}
+                        outer edge so it always fits inside the chat. */}
                     {reactingId === m.id && (
                       <div
                         data-reaction-bar
                         className={cx(
-                          "absolute bottom-full z-10 mb-0.5 flex gap-0.5 rounded-full border border-line bg-panel p-1 shadow-[0_6px_24px_rgb(0_0_0/0.18)]",
+                          "absolute bottom-full z-10 mb-0.5 flex animate-pop items-center gap-0.5 rounded-full border border-line bg-panel p-1 shadow-pop",
                           mine ? "right-11" : "left-11",
                         )}
                       >
@@ -916,7 +969,7 @@ export default function ChatWindow({
                             key={emoji}
                             type="button"
                             className={cx(
-                              "grid size-8 place-items-center rounded-full text-lg hover:bg-panel-2",
+                              "grid size-8 place-items-center rounded-full text-lg transition-transform hover:scale-125",
                               m.reactions.some(
                                 (r) => r.userId === me.id && r.emoji === emoji,
                               ) && "bg-accent-soft",
@@ -938,71 +991,43 @@ export default function ChatWindow({
                           aria-label="More emojis"
                           title="More emojis"
                         >
-                          <svg
-                            viewBox="0 0 24 24"
-                            className="size-4.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            aria-hidden="true"
-                          >
-                            <path d="M12 5v14M5 12h14" />
-                          </svg>
+                          <Plus className="size-4.5" />
                         </button>
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      className={cx(messageAction, "mt-1.5")}
-                      onClick={() => {
-                        updateReply(m);
-                        inputRef.current?.focus();
-                      }}
-                      aria-label="Reply"
-                      title="Reply"
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="size-4"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="m9 14-5-5 5-5" />
-                        <path d="M4 9h11a5 5 0 0 1 5 5v5" />
-                      </svg>
-                    </button>
-                    {/* Only while it's recent enough to delete. */}
-                    {mine && msBetween(m.createdAt, now) < DELETE_WINDOW_MS && (
-                      <button
-                        type="button"
-                        className={cx(
-                          messageAction,
-                          "mt-1.5 hover:text-danger",
-                        )}
-                        onClick={() => void remove(m)}
-                        aria-label="Delete"
-                        title="Delete"
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="size-4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
+                        {/* Touch screens: reply and delete live here too. */}
+                        <span
+                          className={cx("mx-0.5 h-5 w-px bg-line", onlyOnTouch)}
+                        />
+                        <button
+                          type="button"
+                          className={cx(
+                            "grid size-8 place-items-center rounded-full text-muted",
+                            onlyOnTouch,
+                          )}
+                          onClick={() => {
+                            setReactingId(null);
+                            startReply(m);
+                          }}
+                          aria-label="Reply"
                         >
-                          <path d="M3 6h18" />
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        </svg>
-                      </button>
+                          <ReplyIcon className="size-4.5" />
+                        </button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            className={cx(
+                              "grid size-8 place-items-center rounded-full text-danger",
+                              onlyOnTouch,
+                            )}
+                            onClick={() => {
+                              setReactingId(null);
+                              void remove(m);
+                            }}
+                            aria-label="Delete"
+                          >
+                            <TrashIcon className="size-4.5" />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </>
                 )}
@@ -1012,14 +1037,14 @@ export default function ChatWindow({
         })}
 
         {typing && (
-          <div className="mt-2.5 flex items-center gap-2 self-start">
+          <div className="mt-3 flex items-center gap-2 self-start">
             <Avatar
               name={nameOf(user)}
               src={user.avatarUrl}
               size={MESSAGE_AVATAR}
             />
             <div
-              className="flex gap-1 rounded-[18px] rounded-bl-md bg-bubble px-3.5 py-3"
+              className="flex gap-1 rounded-[20px] rounded-bl-md bg-bubble px-4 py-3.5 shadow-bubble"
               aria-label={`${nameOf(user)} is typing`}
             >
               {["0s", "0.15s", "0.3s"].map((delay) => (
@@ -1037,13 +1062,13 @@ export default function ChatWindow({
       {/* The picker sits outside the <form>, so Enter in its search box doesn't send the message. */}
       <div ref={composerRef} className="relative">
         {emojiOpen && (
-          <div className="absolute bottom-full left-3 z-10 mb-2 w-[min(350px,calc(100%-1.5rem))]">
+          <div className="absolute bottom-full left-3 z-10 mb-2 w-[min(350px,calc(100%-1.5rem))] animate-pop">
             {emojiTarget !== "draft" && (
-              <p className="mb-1 w-fit rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-white">
+              <p className="mb-1.5 w-fit rounded-full bg-linear-to-br from-fill to-fill-2 px-3 py-1 text-xs font-semibold text-white shadow-pop">
                 Pick a reaction for the highlighted message
               </p>
             )}
-            <div className="rounded-2xl shadow-[0_10px_40px_rgb(0_0_0/0.18)]">
+            <div className="rounded-2xl shadow-pop">
               <Suspense
                 fallback={
                   <div className="grid h-95 place-items-center rounded-2xl border border-line bg-panel text-muted">
@@ -1057,7 +1082,7 @@ export default function ChatWindow({
           </div>
         )}
         <form
-          className="flex flex-wrap items-end gap-2.5 border-t border-line bg-panel px-4 py-3"
+          className="flex flex-wrap items-end gap-2 border-t border-line bg-panel px-4 py-3"
           onSubmit={handleSubmit}
         >
           {error && (
@@ -1066,7 +1091,7 @@ export default function ChatWindow({
             </p>
           )}
           {replyingTo && (
-            <div className="flex basis-full items-center gap-2 rounded-xl border-l-3 border-accent bg-panel-2 py-1.5 pr-1.5 pl-3 text-sm">
+            <div className="flex basis-full items-center gap-2 rounded-xl border-l-3 border-accent bg-accent-soft/60 py-1.5 pr-1.5 pl-3 text-sm">
               <div className="min-w-0 flex-1">
                 <div className="font-semibold text-accent">
                   Replying to{" "}
@@ -1078,11 +1103,11 @@ export default function ChatWindow({
               </div>
               <button
                 type="button"
-                className={cx(ui.btnGhost, "text-xl leading-none")}
+                className={cx(ui.iconBtn, "size-8")}
                 onClick={() => updateReply(null)}
                 aria-label="Cancel reply"
               >
-                ×
+                <X className="size-4.5" />
               </button>
             </div>
           )}
@@ -1105,7 +1130,7 @@ export default function ChatWindow({
                     onClick={() => setAttachment(null)}
                     aria-label="Remove image"
                   >
-                    ×
+                    <X className="size-3.5" strokeWidth={2.5} />
                   </button>
                 )}
               </div>
@@ -1119,79 +1144,60 @@ export default function ChatWindow({
             onChange={handleFile}
             aria-label="Choose an image to send"
           />
-          <button
-            type="button"
-            className="grid size-10.5 flex-none place-items-center rounded-full text-muted hover:enabled:bg-panel-2 hover:enabled:text-fg disabled:opacity-50"
-            onClick={() => fileRef.current?.click()}
-            disabled={sendingImage}
-            aria-label="Attach an image"
-            title="Attach an image"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              className="size-5.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+          {/* The text box and its two buttons share one rounded field. */}
+          <div className="flex min-w-0 flex-1 items-end gap-0.5 rounded-[24px] border border-line bg-panel-2 p-1 transition focus-within:border-accent focus-within:bg-panel focus-within:ring-3 focus-within:ring-accent-soft">
+            <button
+              type="button"
+              className={composerButton}
+              onClick={() => fileRef.current?.click()}
+              disabled={sendingImage}
+              aria-label="Attach an image"
+              title="Attach an image"
             >
-              <rect x="3" y="4" width="18" height="16" rx="3" />
-              <circle cx="8.5" cy="9.5" r="1.5" />
-              <path d="m21 15-4.5-4.5L7 20" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className={cx(
-              "grid size-10.5 flex-none place-items-center rounded-full hover:bg-panel-2 hover:text-fg",
-              emojiTarget === "draft" ? "bg-panel-2 text-fg" : "text-muted",
-            )}
-            onClick={() =>
-              setEmojiTarget((target) => (target === "draft" ? null : "draft"))
-            }
-            aria-label="Emoji"
-            aria-expanded={emojiTarget === "draft"}
-            title="Emoji"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              className="size-5.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+              <ImageIcon className="size-5.5" strokeWidth={1.9} />
+            </button>
+            <button
+              type="button"
+              className={cx(
+                composerButton,
+                emojiTarget === "draft" && "bg-accent-soft text-accent",
+              )}
+              onClick={() =>
+                setEmojiTarget((target) =>
+                  target === "draft" ? null : "draft",
+                )
+              }
+              aria-label="Emoji"
+              aria-expanded={emojiTarget === "draft"}
+              title="Emoji"
             >
-              <circle cx="12" cy="12" r="9" />
-              <path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" />
-              <path d="M9 9.75h.01M15 9.75h.01" strokeWidth="2.6" />
-            </svg>
-          </button>
-          <textarea
-            ref={inputRef}
-            rows={1}
-            value={draft}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            onBlur={stopTyping}
-            placeholder={`Message ${nameOf(user)}`}
-            maxLength={MAX_MESSAGE_LENGTH}
-            aria-label={`Message ${nameOf(user)}`}
-            className={cx(
-              ui.fieldBase,
-              "field-sizing-content max-h-40 min-h-10.5 flex-1 resize-none rounded-[21px] px-4 py-2",
-            )}
-          />
+              <SmileIcon className="size-5.5" strokeWidth={1.9} />
+            </button>
+            <textarea
+              ref={inputRef}
+              rows={1}
+              value={draft}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              onBlur={stopTyping}
+              placeholder={`Message ${nameOf(user)}`}
+              maxLength={MAX_MESSAGE_LENGTH}
+              aria-label={`Message ${nameOf(user)}`}
+              className="field-sizing-content max-h-40 min-h-9.5 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 outline-none placeholder:text-muted"
+            />
+          </div>
           <button
-            className={cx(ui.primaryBase, "h-10.5 rounded-[21px] px-4")}
+            className={cx(
+              ui.primaryBase,
+              "grid size-12 flex-none place-items-center rounded-full",
+            )}
             type="submit"
             disabled={(!draft.trim() && !attachment) || sendingImage}
+            aria-label="Send"
+            title="Send"
           >
-            Send
+            <Send className="size-5 -translate-x-px translate-y-px" />
           </button>
         </form>
       </div>
