@@ -14,7 +14,7 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 - **Images:** attach a picture with the image button or paste one from the clipboard; it's shrunk in the browser, stored in a private Supabase Storage bucket that only the two people in the conversation can load from, and opens full-size when clicked
 - Conversation list sorted by latest message, with unread badges
 - Online / offline status, typing indicator, and read receipts: one tick on each message you've sent, two blue ticks once it's been seen
-- **Replies:** hover a message (or open its **…** menu on a phone) to reply to it; the reply shows a quote of the original, and clicking the quote jumps to it
+- **Replies:** hover a message (or tap its smiley button on a phone) to reply to it; the reply shows a quote of the original, and clicking the quote jumps to it
 - **Reactions:** react to any message with 👍 ❤️ 😂 😮 😢 🙏, or any other emoji from the full picker via "+" (one per person per message; pick it again to take it back). They appear under the message for both people straight away
 - **Delete:** remove a message you sent, for both people, up to 2 days after sending it. It leaves a "This message was deleted" placeholder, and a deleted picture's file is removed from storage
 - **Link previews:** links in messages are clickable, and the first one gets a card with the page's title, description and picture

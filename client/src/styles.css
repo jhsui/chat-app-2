@@ -275,35 +275,6 @@
   .send-button:active:enabled {
     transform: scale(0.94);
   }
-  .send-button:disabled {
-    background: var(--panel-2);
-    color: var(--muted);
-    box-shadow: none;
-    opacity: 0.65;
-  }
-  .message-actions {
-    position: absolute;
-    top: 0;
-    right: -2px;
-    transform: translateY(-85%);
-    z-index: 2;
-    padding: 3px;
-    border-radius: 12px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    box-shadow: var(--shadow-bubble);
-    opacity: 0;
-    pointer-events: none;
-    transition:
-      opacity 140ms,
-      transform 140ms;
-  }
-  .group:hover > .message-actions,
-  .message-actions:focus-within {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(-100%);
-  }
   .floating-menu {
     position: fixed;
     z-index: 80;
@@ -468,20 +439,14 @@
     background-position: -200% 0;
   }
 }
-@media (hover: none) {
-  .message-actions {
-    position: static;
-    transform: none;
-    opacity: 1;
-    pointer-events: auto;
-    background: transparent;
-    border: 0;
-    box-shadow: none;
-    padding: 0;
-  }
-  .group:hover > .message-actions {
-    transform: none;
-  }
+/* Outside the layers on purpose: the button's Tailwind classes (gradient, white
+   icon, its own disabled opacity) are in the utilities layer, which beats
+   anything in "components". Unlayered rules beat both. */
+.send-button:disabled {
+  background: var(--panel-2);
+  color: var(--muted);
+  box-shadow: none;
+  opacity: 0.65;
 }
 @media (max-width: 1100px) {
   .app-stage {

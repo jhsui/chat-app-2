@@ -14,8 +14,6 @@ import {
 import {
   ArrowDown,
   ArrowUpRight,
-  Info,
-  MoreHorizontal,
   WifiOff,
   Check,
   CheckCheck,
@@ -48,7 +46,6 @@ import { toChatImage, type ChatImage } from "../image.ts";
 import { cx, ui } from "../ui.ts";
 import Avatar from "./Avatar.tsx";
 import ImageViewer from "./ImageViewer.tsx";
-import FloatingMenu from "./FloatingMenu.tsx";
 import DeleteMessageDialog from "./DeleteMessageDialog.tsx";
 import { ThemeButton } from "../theme.tsx";
 
@@ -60,15 +57,25 @@ const MAX_MESSAGE_LENGTH = 2000;
 const DELETE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
 /** The reactions offered straight away on a message; "+" opens the full picker for any other emoji. */
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
-// Look of the small round buttons beside a message (react, reply, delete).
-// They show on hover. Touch screens can't hover: there only the react button
-// is shown (always), and the bar it opens offers reply and delete too.
+// The small round buttons beside a message (react, reply, delete). They show
+// when the message is hovered or one of them has keyboard focus. Touch screens
+// can't hover: there only the react button is shown (always), and the bar it
+// opens offers reply and delete too.
 const messageAction =
-  "grid size-9 flex-none place-items-center rounded-lg text-muted transition hover:bg-panel-2 hover:text-fg [@media(hover:none)]:size-11";
+  "grid size-8 flex-none place-items-center rounded-full transition [@media(hover:none)]:size-10";
+// Two separate looks, never combined, so their colors can't clash.
+const actionIdle =
+  "text-muted opacity-0 group-hover:opacity-100 hover:bg-panel hover:text-fg hover:shadow-bubble focus-visible:opacity-100 [@media(hover:none)]:opacity-70";
+const actionOpen = "bg-panel text-accent opacity-100 shadow-bubble";
 const onlyWithHover = "[@media(hover:none)]:hidden";
+const onlyOnTouch = "[@media(hover:hover)]:hidden";
+// A button in the reaction bar. Slightly smaller on the narrowest phones, so
+// the whole bar (with reply and delete) still fits on one line.
+const barButton =
+  "grid size-8 place-items-center rounded-full max-[350px]:size-7";
 // The image and emoji buttons inside the message box.
 const composerButton =
-  "grid size-11 flex-none place-items-center rounded-xl text-muted transition-colors hover:enabled:bg-panel-2 hover:enabled:text-accent disabled:opacity-50";
+  "grid size-11 flex-none place-items-center rounded-xl transition-colors hover:enabled:bg-panel-2 hover:enabled:text-accent disabled:opacity-50";
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 /** Size of the avatar beside each run of messages, in pixels. */
@@ -361,12 +368,10 @@ export default function ChatWindow({
   const [replyingTo, setReplyingTo] = useState(initialReplyTo);
   const replyRef = useRef(initialReplyTo);
   const [highlightId, setHighlightId] = useState<number | null>(null); // message just jumped to
-  const [actionAnchor, setActionAnchor] = useState<HTMLButtonElement | null>(
-    null,
-  );
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
   const deleteAnchorRef = useRef<HTMLButtonElement | null>(null);
   const [reactingId, setReactingId] = useState<number | null>(null); // message whose reaction bar is open
+  const [reactingBelow, setReactingBelow] = useState(false); // that bar opens under the message, not over it
   const [error, setError] = useState("");
   // The picture waiting to be sent, shown above the text box.
   const [attachment, setAttachment] = useState<{
@@ -534,6 +539,38 @@ export default function ChatWindow({
       setError(errorMessage(err));
     }
   }
+
+  /** Opens (or closes) the reaction bar of a message, from its react button. */
+  function toggleReactions(message: Message, button: HTMLElement) {
+    // The bar sits above the message, unless the message is at the very top of
+    // the list, where the bar would be cut off: then it goes underneath.
+    const list = listRef.current;
+    if (list) {
+      const fromTop =
+        button.getBoundingClientRect().top - list.getBoundingClientRect().top;
+      setReactingBelow(fromTop < 64);
+    }
+    setReactingId((id) => (id === message.id ? null : message.id));
+  }
+
+  // Close the reaction bar with Esc, or by clicking anywhere outside it.
+  useEffect(() => {
+    if (reactingId === null) return;
+    function onPointerDown(e: PointerEvent) {
+      const inside =
+        e.target instanceof Element && e.target.closest("[data-reaction-bar]");
+      if (!inside) setReactingId(null);
+    }
+    function onKeyDown(e: globalThis.KeyboardEvent) {
+      if (e.key === "Escape") setReactingId(null);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [reactingId]);
 
   /** Tells the other person we're typing, until 2 seconds pass without a change. */
   function noteTyping() {
@@ -716,21 +753,9 @@ export default function ChatWindow({
           </div>
         </button>
         <div className="ml-auto flex items-center gap-1">
-          <span className="mr-3 hidden rounded-full border border-line px-3 py-1.5 text-[11px] font-medium text-muted lg:inline-flex">
-            Direct message
-          </span>
           <span className="md:hidden">
             <ThemeButton />
           </span>
-          <button
-            type="button"
-            className={cx(ui.iconBtn, "size-11")}
-            onClick={onShowProfile}
-            aria-label="Conversation details"
-            title="Conversation details"
-          >
-            <Info className="size-5" />
-          </button>
         </div>
       </header>
       {!connected && (
@@ -970,33 +995,27 @@ export default function ChatWindow({
                 {/* Nothing can be done with a deleted message. */}
                 {!m.deletedAt && (
                   <>
-                    <div
-                      className={cx(
-                        "message-actions flex flex-none items-center",
-                        mine && "flex-row-reverse",
-                      )}
-                    >
+                    {/* Same order on both sides: react, reply, delete. */}
+                    <div className="mt-1 flex flex-none items-center">
                       <button
                         type="button"
                         data-reaction-bar
                         className={cx(
                           messageAction,
-                          reactingId === m.id && "bg-accent-soft text-accent",
+                          reactingId === m.id ? actionOpen : actionIdle,
                         )}
-                        onClick={(event) => {
-                          setActionAnchor(event.currentTarget);
-                          setReactingId((id) => (id === m.id ? null : m.id));
-                        }}
-                        aria-haspopup="menu"
-                        aria-label="Message actions"
+                        onClick={(event) =>
+                          toggleReactions(m, event.currentTarget)
+                        }
+                        aria-label="React"
                         aria-expanded={reactingId === m.id}
-                        title="Reactions and actions"
+                        title="React"
                       >
-                        <MoreHorizontal className="size-4.5" />
+                        <SmileIcon className="size-4.5" />
                       </button>
                       <button
                         type="button"
-                        className={cx(messageAction, onlyWithHover)}
+                        className={cx(messageAction, actionIdle, onlyWithHover)}
                         onClick={() => startReply(m)}
                         aria-label="Reply"
                         title="Reply"
@@ -1009,6 +1028,7 @@ export default function ChatWindow({
                           type="button"
                           className={cx(
                             messageAction,
+                            actionIdle,
                             onlyWithHover,
                             "hover:text-danger",
                           )}
@@ -1023,90 +1043,90 @@ export default function ChatWindow({
                         </button>
                       )}
                     </div>
-                    {reactingId === m.id && actionAnchor && (
-                      <FloatingMenu
-                        anchor={actionAnchor}
-                        label="Message actions"
-                        onClose={() => setReactingId(null)}
+                    {/* The bar opens over the message, lined up with the bubble's
+                        outer edge so it always fits inside the chat. On a very
+                        narrow screen it wraps onto a second line. */}
+                    {reactingId === m.id && (
+                      <div
+                        data-reaction-bar
+                        className={cx(
+                          "absolute z-10 flex w-max max-w-[calc(100vw-1.75rem)] animate-pop flex-wrap items-center gap-0.5 rounded-[22px] border border-line bg-panel p-1 shadow-pop",
+                          reactingBelow
+                            ? "top-full mt-0.5"
+                            : "bottom-full mb-0.5",
+                          // Lined up with the bubble; on phones with the avatar, for more room.
+                          mine
+                            ? "right-9 max-md:right-0"
+                            : "left-9 max-md:left-0",
+                        )}
                       >
-                        <p className="eyebrow px-3 pt-2 pb-3">
-                          A little reaction goes a long way
-                        </p>
-                        <div
-                          role="group"
-                          aria-label="Quick reactions"
-                          className="grid grid-cols-6 gap-0.5 px-1 pb-2"
-                        >
-                          {QUICK_REACTIONS.map((emoji) => (
-                            <button
-                              key={emoji}
-                              type="button"
-                              role="menuitemcheckbox"
-                              aria-checked={m.reactions.some(
+                        {QUICK_REACTIONS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            className={cx(
+                              barButton,
+                              "text-lg transition-transform hover:scale-125",
+                              m.reactions.some(
                                 (r) => r.userId === me.id && r.emoji === emoji,
-                              )}
-                              aria-label={`React with ${emoji}`}
-                              className={cx(
-                                "grid min-h-11 place-items-center rounded-xl text-xl transition hover:scale-110 hover:bg-panel-2",
-                                m.reactions.some(
-                                  (r) =>
-                                    r.userId === me.id && r.emoji === emoji,
-                                ) && "bg-accent-soft",
-                              )}
-                              onClick={() => {
-                                actionAnchor.focus({ preventScroll: true });
-                                void react(m, emoji);
-                              }}
-                            >
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                        <div
-                          role="separator"
-                          className="mx-2 mb-1 border-t border-line"
+                              ) && "bg-accent-soft",
+                            )}
+                            onClick={() => void react(m, emoji)}
+                            aria-label={`React with ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        {/* Any other emoji: opens the full picker (above the message box). */}
+                        <button
+                          type="button"
+                          className={cx(
+                            barButton,
+                            "text-muted hover:bg-panel-2 hover:text-fg",
+                          )}
+                          onClick={() => {
+                            setReactingId(null);
+                            setEmojiTarget(m.id);
+                          }}
+                          aria-label="More emojis"
+                          title="More emojis"
+                        >
+                          <Plus className="size-4.5" />
+                        </button>
+                        {/* Touch screens: reply and delete live here too. */}
+                        <span
+                          className={cx("mx-0.5 h-5 w-px bg-line", onlyOnTouch)}
                         />
                         <button
                           type="button"
-                          role="menuitem"
-                          className="menu-action"
+                          className={cx(barButton, "text-muted", onlyOnTouch)}
                           onClick={() => {
                             setReactingId(null);
                             startReply(m);
                           }}
+                          aria-label="Reply"
                         >
-                          <ReplyIcon className="size-[18px]" />
-                          Reply to message
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="menu-action"
-                          onClick={() => {
-                            setReactingId(null);
-                            setEmojiTarget(m.id);
-                            inputRef.current?.focus();
-                          }}
-                        >
-                          <Plus className="size-[18px]" />
-                          More reactions
+                          <ReplyIcon className="size-4.5" />
                         </button>
                         {canDelete && (
                           <button
                             type="button"
-                            role="menuitem"
-                            className="menu-action text-danger"
-                            onClick={() => {
-                              deleteAnchorRef.current = actionAnchor;
+                            className={cx(
+                              barButton,
+                              "text-danger",
+                              onlyOnTouch,
+                            )}
+                            onClick={(event) => {
+                              deleteAnchorRef.current = event.currentTarget;
                               setReactingId(null);
                               setDeletingMessage(m);
                             }}
+                            aria-label="Delete"
                           >
-                            <TrashIcon className="size-[18px]" />
-                            Delete message
+                            <TrashIcon className="size-4.5" />
                           </button>
                         )}
-                      </FloatingMenu>
+                      </div>
                     )}
                   </>
                 )}
@@ -1158,11 +1178,6 @@ export default function ChatWindow({
         )}
         {emojiOpen && (
           <div className="absolute bottom-full left-3 z-10 mb-2 w-[min(350px,calc(100%-1.5rem))] animate-pop">
-            {emojiTarget !== "draft" && (
-              <p className="mb-1.5 w-fit rounded-full bg-linear-to-br from-fill to-fill-2 px-3 py-1 text-xs font-semibold text-white shadow-pop">
-                Pick a reaction for the highlighted message
-              </p>
-            )}
             <div className="rounded-2xl shadow-pop">
               <Suspense
                 fallback={
@@ -1243,7 +1258,7 @@ export default function ChatWindow({
           <div className="composer-field flex min-w-0 basis-full items-end gap-1">
             <button
               type="button"
-              className={composerButton}
+              className={cx(composerButton, "text-muted")}
               onClick={() => fileRef.current?.click()}
               disabled={sendingImage}
               aria-label="Attach an image"
@@ -1255,7 +1270,9 @@ export default function ChatWindow({
               type="button"
               className={cx(
                 composerButton,
-                emojiTarget === "draft" && "bg-accent-soft text-accent",
+                emojiTarget === "draft"
+                  ? "bg-accent-soft text-accent"
+                  : "text-muted",
               )}
               onClick={() =>
                 setEmojiTarget((target) =>

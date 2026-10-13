@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Check, Monitor, Moon, Sun } from "lucide-react";
+import { Check, Moon, Sun, SunMoon } from "lucide-react";
 import { cx, ui } from "./ui.ts";
 import FloatingMenu from "./components/FloatingMenu.tsx";
 
@@ -21,7 +21,7 @@ const themeOptions = [
     value: "system",
     label: "System",
     detail: "Follow your device",
-    icon: Monitor,
+    icon: SunMoon,
   },
 ] as const;
 
@@ -97,10 +97,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 }
 
 export function ThemeButton() {
-  const { theme, setTheme } = useAppearance();
+  const { theme, resolvedTheme, setTheme } = useAppearance();
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);
-  const Icon = theme === "system" ? Monitor : theme === "light" ? Sun : Moon;
+  // The look that's showing right now, also when it comes from "System".
+  const Icon = resolvedTheme === "dark" ? Moon : Sun;
   return (
     <>
       <button
@@ -109,7 +110,8 @@ export function ThemeButton() {
         className={cx(
           ui.iconBtn,
           "size-11",
-          open && "bg-accent-soft text-accent",
+          // "!" so these beat the gray text and hover background in ui.iconBtn.
+          open && "bg-accent-soft! text-accent!",
         )}
         onClick={() => setOpen(!open)}
         aria-label="Appearance"

@@ -130,9 +130,11 @@ export default function Sidebar({
   const onlineCount = people.filter((p) => isOnline(p)).length;
   const q = query.trim().toLowerCase();
 
-  const filteredConversations = conversations.filter((c) =>
-    `${c.username} ${c.displayName ?? ""}`.toLowerCase().includes(q),
-  );
+  // Both lists are narrowed by the search box, by username or display name.
+  const matches = (u: PublicUser) =>
+    `${u.username} ${u.displayName ?? ""}`.toLowerCase().includes(q);
+  const filteredConversations = conversations.filter(matches);
+  const filteredPeople = people.filter(matches);
   const tabClass = (selected: boolean) =>
     cx(
       "flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[10px] text-[13px] font-semibold transition-all",
@@ -156,9 +158,6 @@ export default function Sidebar({
           <h1 className="text-[27px] leading-tight font-bold tracking-tight">
             Messages
           </h1>
-          <p className="mt-1 text-xs text-muted">
-            A little closer, wherever you are.
-          </p>
         </div>
         <button
           type="button"
@@ -251,7 +250,9 @@ export default function Sidebar({
           {tab === "chats" ? "Your conversations" : "Your community"}
         </span>
         <span className="text-[11px] text-muted">
-          {tab === "chats" ? filteredConversations.length : people.length}
+          {tab === "chats"
+            ? filteredConversations.length
+            : filteredPeople.length}
         </span>
       </div>
       <ul
@@ -262,14 +263,7 @@ export default function Sidebar({
       >
         {tab === "people" ? (
           <PeopleList
-            people={sortPeople(
-              people.filter((p) =>
-                `${p.username} ${p.displayName ?? ""}`
-                  .toLowerCase()
-                  .includes(q),
-              ),
-              isOnline,
-            )}
+            people={sortPeople(filteredPeople, isOnline)}
             filtered={q.length > 0}
             activeId={activeId}
             typing={typing}
@@ -371,7 +365,7 @@ export default function Sidebar({
           aria-label="Log out"
           title="Log out"
         >
-          <LogOut className="size-[18px]" />
+          <LogOut className="size-4.5" />
         </button>
       </footer>
     </aside>
