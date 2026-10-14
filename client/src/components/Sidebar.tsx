@@ -13,6 +13,7 @@ import { cx, ui } from "../ui.ts";
 import Avatar from "./Avatar.tsx";
 import Brand from "./Brand.tsx";
 import { ThemeButton } from "../theme.tsx";
+import { useListGlide } from "../motion.ts";
 
 type Tab = "chats" | "people";
 
@@ -109,6 +110,10 @@ export default function Sidebar({
   const [tab, setTab] = useState<Tab>("chats");
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  // Rows glide to their new place when the order changes (a new message
+  // bumps a chat to the top, someone comes online).
+  useListGlide(listRef, tab);
 
   function switchTab(next: Tab) {
     setTab(next);
@@ -261,6 +266,7 @@ export default function Sidebar({
       {/* Keyed by tab, so switching tabs slides the new list in. */}
       <ul
         key={tab}
+        ref={listRef}
         id="sidebar-list"
         aria-labelledby={`tab-${tab}`}
         className="tab-panel min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pt-1 pb-4"
@@ -290,7 +296,7 @@ export default function Sidebar({
                 `${c.lastSenderId === me.id ? "You: " : ""}${c.lastIsDeleted ? "Message deleted" : c.lastIsImage ? "📷 Photo" : c.lastBody}`
               );
               return (
-                <li key={c.id}>
+                <li key={c.id} data-glide-id={c.id}>
                   <button
                     className={row.item()}
                     data-active={c.id === activeId}
@@ -417,7 +423,7 @@ function PeopleList({
     const isOn = isOnline(p);
     const draft = draftOf(p.id);
     return (
-      <li key={p.id}>
+      <li key={p.id} data-glide-id={p.id}>
         <button
           className={row.item()}
           data-active={p.id === activeId}

@@ -207,7 +207,8 @@
   }
   /* The living colour field behind everything: soft blobs drifting slowly, so
      the glass always has light and colour to bend. Transform-only animation,
-     so it stays on the compositor. */
+     so it stays on the compositor. It still makes every blurred surface
+     redraw, so it only runs while the page is in use (see glass.ts). */
   body::before,
   body::after {
     content: "";
@@ -222,14 +223,14 @@
       radial-gradient(circle at 28% 30%, var(--ambient) 0, transparent 22%),
       radial-gradient(circle at 74% 26%, var(--ambient-pink) 0, transparent 20%),
       radial-gradient(circle at 58% 74%, var(--ambient-mint) 0, transparent 24%);
-    animation: drift-a 38s ease-in-out infinite alternate;
+    animation: drift-a 70s ease-in-out infinite alternate;
   }
   body::after {
     background:
       radial-gradient(circle at 70% 64%, var(--ambient-violet) 0, transparent 18%),
       radial-gradient(circle at 34% 70%, var(--ambient-sun) 0, transparent 16%);
     opacity: 0.85;
-    animation: drift-b 52s ease-in-out infinite alternate;
+    animation: drift-b 95s ease-in-out infinite alternate;
   }
   * {
     scrollbar-width: thin;
@@ -329,6 +330,21 @@
   }
   .tab-panel {
     animation: panel-in 520ms var(--ease-spring-soft);
+  }
+  /* A row on its way up the list (motion.ts) travels on a card above the
+     rows it passes. Solid, not glass: their text would show through. */
+  [data-gliding="up"] {
+    position: relative;
+    z-index: 1;
+  }
+  [data-gliding="up"] > .conversation-row {
+    /* Solid at once (the row's usual background fade only on landing). */
+    transition-property: scale;
+    background: var(--panel);
+    box-shadow:
+      var(--glass-depth),
+      inset 0 0 0 1px var(--glass-edge),
+      0 12px 28px -10px rgb(30 60 130 / 0.35);
   }
   .chat-conversation {
     container-type: inline-size;
@@ -577,7 +593,7 @@
     border-radius: 50%;
     background: radial-gradient(circle, #2c55a8 0%, transparent 67%);
     opacity: 0.65;
-    animation: drift-a 30s ease-in-out infinite alternate;
+    animation: drift-a 60s ease-in-out infinite alternate;
   }
   .auth-story::after {
     content: "";
@@ -721,6 +737,14 @@
   }
 }
 
+/* The background only drifts while the page is in use (glass.ts sets the
+   attribute). Unlayered, so it beats the animation shorthands above. */
+:root:not([data-ambient="live"]) body::before,
+:root:not([data-ambient="live"]) body::after,
+:root:not([data-ambient="live"]) .auth-story::before {
+  animation-play-state: paused;
+}
+
 /* ---------------------------------------------------------------------------
    Liquid glass. Unlayered on purpose, so it beats the solid Tailwind surface
    utilities (bg-panel, border-line…) on the elements that use it.
@@ -748,7 +772,8 @@
     --spec 450ms ease,
     box-shadow 260ms;
 }
-.liquid-glass:not(.glass-pane):hover {
+/* .glass-unlit opts a surface out of the highlight (the rim still turns). */
+.liquid-glass:not(.glass-pane, .glass-unlit):hover {
   --spec: 1;
 }
 /* A 1px ring, brightest on the side facing the light and again opposite it,

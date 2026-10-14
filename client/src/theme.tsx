@@ -71,12 +71,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useLayoutEffect(() => {
-    document.documentElement.dataset.theme = resolvedTheme;
+    const root = document.documentElement;
+    root.dataset.theme = resolvedTheme;
+    // The browser's own bars (e.g. the status bar in mobile Safari) take the
+    // page background's colour, read from styles.css so they never disagree.
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute(
         "content",
-        resolvedTheme === "dark" ? "#131c2c" : "#ffffff",
+        getComputedStyle(root).getPropertyValue("--app-bg").trim(),
       );
   }, [resolvedTheme]);
 
