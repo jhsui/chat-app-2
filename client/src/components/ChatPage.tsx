@@ -400,7 +400,8 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
     online[user.id] ?? user.online ?? false;
 
   return (
-    // On wide screens the app is a rounded card floating on the page background.
+    // On wide screens the sidebar and the chat are two glass panes floating
+    // over the page's colour field.
     <div className="app-stage">
       <div className="app-shell">
         <Sidebar
@@ -445,16 +446,16 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
             onShowProfile={() => setProfileId(active.id)}
           />
         ) : (
-          <section className="relative grid place-items-center overflow-hidden bg-chat p-8 text-center max-md:hidden">
+          <section className="liquid-glass glass-pane grid place-items-center p-8 text-center max-md:hidden">
             <div className="max-w-100 animate-pop">
               <div className="empty-orbit" aria-hidden="true">
-                <div className="grid size-22 place-items-center rounded-[28px] bg-linear-to-br from-fill to-fill-2 text-white shadow-pop">
+                <div className="liquid-accent empty-orbit-core grid size-22 place-items-center rounded-[30px]">
                   <MessageCircleMore className="size-10" strokeWidth={1.6} />
                 </div>
-                <span className="orbit-note text-sm">
+                <span className="orbit-note liquid-glass glass-thick text-sm">
                   Hey there <span>👋</span>
                 </span>
-                <span className="orbit-note text-sm">
+                <span className="orbit-note liquid-glass glass-thick text-sm">
                   <span className="size-2 rounded-full bg-online" /> Let's catch
                   up.
                 </span>
@@ -469,7 +470,7 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
                 Choose a conversation, or explore People to make a new
                 connection.
               </p>
-              <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-line bg-panel px-4 py-2 text-xs text-muted">
+              <div className="liquid-glass relative mt-8 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs text-muted">
                 <span className="size-1.5 rounded-full bg-online" /> Real-time.
                 Just you and your people.
               </div>

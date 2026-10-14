@@ -30,7 +30,7 @@ export default function DeleteMessageDialog({
   return (
     <dialog
       ref={ref}
-      className="profile-dialog m-auto w-[min(420px,calc(100%-1.5rem))] animate-pop rounded-3xl border border-line bg-panel p-6 text-fg shadow-pop"
+      className="profile-dialog liquid-glass glass-thick m-auto w-[min(420px,calc(100%-1.5rem))] animate-pop rounded-[32px] p-6 text-fg"
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
       onClose={onClose}
@@ -71,7 +71,7 @@ export default function DeleteMessageDialog({
         <button
           type="button"
           disabled={busy}
-          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#bf2945] px-3 text-sm whitespace-nowrap font-semibold text-white transition hover:bg-[#a62039] disabled:opacity-60"
+          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#bf2945] px-3 text-sm whitespace-nowrap font-semibold text-white shadow-[inset_0_1px_1px_rgb(255_255_255/0.4),0_8px_20px_-8px_rgb(191_41_69/0.7)] transition hover:bg-[#a62039] active:enabled:scale-[0.96] disabled:opacity-60"
           onClick={async () => {
             if (busy) return;
             setBusy(true);

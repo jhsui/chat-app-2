@@ -62,7 +62,7 @@ function UnreadBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span
-      className="grid h-5 min-w-5 flex-none place-items-center rounded-full bg-linear-to-br from-fill to-fill-2 px-1.5 text-xs font-bold text-white"
+      className="liquid-accent unread-badge grid h-5 min-w-5 flex-none place-items-center rounded-full px-1.5 text-xs font-bold"
       aria-label={`${count} unread`}
     >
       {count > 99 ? "99+" : count}
@@ -137,15 +137,15 @@ export default function Sidebar({
   const filteredPeople = people.filter(matches);
   const tabClass = (selected: boolean) =>
     cx(
-      "flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[10px] text-[13px] font-semibold transition-all",
-      selected ? "bg-panel text-fg shadow-bubble" : "text-muted hover:text-fg",
+      "flex min-h-10 flex-1 items-center justify-center gap-2 text-[13px] font-semibold transition-colors duration-300",
+      selected ? "text-fg" : "text-muted hover:text-fg",
     );
 
   return (
     // On narrow screens the sidebar hides while a chat is open.
     <aside
       className={cx(
-        "sidebar flex min-h-0 min-w-0 flex-col border-line md:border-r",
+        "sidebar liquid-glass glass-pane flex min-h-0 min-w-0 flex-col",
         activeId !== undefined && "max-md:hidden",
       )}
     >
@@ -163,7 +163,7 @@ export default function Sidebar({
           type="button"
           className={cx(
             ui.primaryBase,
-            "grid size-11 place-items-center rounded-[14px]",
+            "grid size-11 place-items-center rounded-full",
           )}
           onClick={() => {
             switchTab("people");
@@ -192,7 +192,8 @@ export default function Sidebar({
         />
       </div>
       <div
-        className="mx-5 flex gap-1 rounded-[13px] bg-panel-2 p-1"
+        className="glass-tabs mx-5 flex gap-1 p-1"
+        data-tab={tab}
         role="tablist"
         aria-label="Sidebar"
         onKeyDown={(e) => {
@@ -213,6 +214,8 @@ export default function Sidebar({
             ?.focus();
         }}
       >
+        {/* The lens that slides under the selected tab. */}
+        <span className="tab-glider" aria-hidden="true" />
         <button
           id="tab-chats"
           role="tab"
@@ -223,7 +226,7 @@ export default function Sidebar({
           onClick={() => switchTab("chats")}
         >
           <MessageCircle className="size-4" /> Chats
-          <span className="rounded-md bg-panel-2 px-1.5 text-[11px] text-muted">
+          <span className="rounded-full bg-panel-2 px-1.5 text-[11px] text-muted">
             {conversations.length}
           </span>
         </button>
@@ -255,10 +258,12 @@ export default function Sidebar({
             : filteredPeople.length}
         </span>
       </div>
+      {/* Keyed by tab, so switching tabs slides the new list in. */}
       <ul
+        key={tab}
         id="sidebar-list"
         aria-labelledby={`tab-${tab}`}
-        className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pt-1 pb-4"
+        className="tab-panel min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pt-1 pb-4"
         role="tabpanel"
       >
         {tab === "people" ? (
@@ -339,9 +344,9 @@ export default function Sidebar({
           </>
         )}
       </ul>
-      <footer className="mx-4 flex items-center gap-2 border-t border-line py-4">
+      <footer className="liquid-glass glass-thick relative m-3 mt-1 flex items-center gap-2 rounded-[26px] p-1.5">
         <button
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-2 text-left transition hover:bg-panel-2"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-[20px] p-1.5 text-left transition hover:bg-panel-2"
           onClick={onShowProfile}
           aria-label="Your profile"
         >

@@ -28,6 +28,8 @@ export default function FloatingMenu({
   const [position, setPosition] = useState<{
     top: number;
     left: number;
+    /** The anchor's centre, relative to the menu: the menu grows out of it. */
+    origin: string;
   } | null>(null);
 
   useLayoutEffect(() => {
@@ -53,23 +55,24 @@ export default function FloatingMenu({
       const menuWidth = menu.offsetWidth;
       const menuHeight = menu.offsetHeight;
       const below = rect.bottom + 8;
-      const top =
+      const preferred =
         below + menuHeight <= topEdge + viewportHeight - 12
           ? below
           : rect.top - menuHeight - 8;
-      setPosition({
-        left: Math.max(
-          leftEdge + 12,
-          Math.min(
-            rect.right - menuWidth,
-            leftEdge + viewportWidth - menuWidth - 12,
-          ),
+      const left = Math.max(
+        leftEdge + 12,
+        Math.min(
+          rect.right - menuWidth,
+          leftEdge + viewportWidth - menuWidth - 12,
         ),
-        top: Math.max(
-          topEdge + 12,
-          Math.min(top, topEdge + viewportHeight - menuHeight - 12),
-        ),
-      });
+      );
+      const top = Math.max(
+        topEdge + 12,
+        Math.min(preferred, topEdge + viewportHeight - menuHeight - 12),
+      );
+      const originX = rect.left + rect.width / 2 - left;
+      const originY = rect.top + rect.height / 2 - top;
+      setPosition({ left, top, origin: `${originX}px ${originY}px` });
     }
     positionMenu();
     window.addEventListener("resize", positionMenu);
@@ -118,11 +121,12 @@ export default function FloatingMenu({
       ref={menuRef}
       role="menu"
       aria-label={label}
-      className="floating-menu"
+      className="floating-menu liquid-glass glass-thick"
       style={{
         width,
         top: position?.top ?? 0,
         left: position?.left ?? 0,
+        transformOrigin: position?.origin,
         visibility: position ? "visible" : "hidden",
       }}
       onKeyDown={(event) => {

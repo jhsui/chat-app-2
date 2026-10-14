@@ -136,7 +136,7 @@ export function ThemeButton() {
               role="menuitemradio"
               aria-checked={theme === value}
               className={cx(
-                "flex min-h-14 w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-panel-2",
+                "flex min-h-14 w-full items-center gap-3 rounded-[18px] px-3 py-2 text-left transition hover:bg-panel-2 active:scale-[0.97]",
                 theme === value && "bg-accent-soft",
               )}
               onClick={() => {

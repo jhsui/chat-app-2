@@ -65,8 +65,8 @@ const messageAction =
   "grid size-8 flex-none place-items-center rounded-full transition [@media(hover:none)]:size-10";
 // Two separate looks, never combined, so their colors can't clash.
 const actionIdle =
-  "text-muted opacity-0 group-hover:opacity-100 hover:bg-panel hover:text-fg hover:shadow-bubble focus-visible:opacity-100 [@media(hover:none)]:opacity-70";
-const actionOpen = "bg-panel text-accent opacity-100 shadow-bubble";
+  "text-muted opacity-0 group-hover:opacity-100 hover:bg-glass-strong hover:text-fg hover:shadow-bubble focus-visible:opacity-100 active:scale-90 [@media(hover:none)]:opacity-70";
+const actionOpen = "bg-glass-strong text-accent opacity-100 shadow-bubble";
 const onlyWithHover = "[@media(hover:none)]:hidden";
 const onlyOnTouch = "[@media(hover:hover)]:hidden";
 // A button in the reaction bar. Slightly smaller on the narrowest phones, so
@@ -75,7 +75,7 @@ const barButton =
   "grid size-8 place-items-center rounded-full max-[350px]:size-7";
 // The image and emoji buttons inside the message box.
 const composerButton =
-  "grid size-11 flex-none place-items-center rounded-xl transition-colors hover:enabled:bg-panel-2 hover:enabled:text-accent disabled:opacity-50";
+  "grid size-11 flex-none place-items-center rounded-full transition hover:enabled:bg-panel-2 hover:enabled:text-accent active:enabled:scale-90 disabled:opacity-50";
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 /** Size of the avatar beside each run of messages, in pixels. */
@@ -123,7 +123,7 @@ function ImageBubble({
   return (
     <button
       type="button"
-      className="block max-w-full overflow-hidden rounded-[20px] bg-panel-2 shadow-bubble"
+      className="image-bubble block max-w-full overflow-hidden rounded-[22px] bg-panel-2"
       title={title}
       onClick={onOpen}
       aria-label="View image"
@@ -220,7 +220,7 @@ function LinkPreviewCard({ preview }: { preview: LinkPreview }) {
       href={preview.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="link-card block w-80 max-w-full overflow-hidden rounded-[18px] border border-line bg-panel shadow-bubble"
+      className="link-card message-bubble block w-80 max-w-full overflow-hidden rounded-[20px]"
     >
       {/* A fixed height, so the chat doesn't jump when the picture loads. The
           picture comes straight from the other site; no-referrer keeps this
@@ -385,6 +385,8 @@ export default function ChatWindow({
   const [emojiTarget, setEmojiTarget] = useState<"draft" | number | null>(null);
   const emojiOpen = emojiTarget !== null;
   const composerRef = useRef<HTMLDivElement>(null);
+  // The header (and the reconnecting notice under it), floating over the list.
+  const topRef = useRef<HTMLDivElement>(null);
   // Where to put the cursor once an inserted emoji is in the text box.
   const caretRef = useRef<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -434,6 +436,25 @@ export default function ChatWindow({
       if (scrollState.current.nearBottom) el.scrollTop = el.scrollHeight;
     });
     observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // The header and the message box float over the list, which scrolls under
+  // them. The list is padded by their heights so its first and last messages
+  // can still be scrolled clear of them, and stays pinned to the bottom when
+  // the message box grows (a reply, a picture, more lines of text).
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const top = topRef.current;
+    const dock = composerRef.current;
+    if (!list || !top || !dock) return;
+    const observer = new ResizeObserver(() => {
+      list.style.setProperty("--top-h", `${top.offsetHeight}px`);
+      list.style.setProperty("--composer-h", `${dock.offsetHeight}px`);
+      if (scrollState.current.nearBottom) list.scrollTop = list.scrollHeight;
+    });
+    observer.observe(top);
+    observer.observe(dock);
     return () => observer.disconnect();
   }, []);
 
@@ -542,12 +563,12 @@ export default function ChatWindow({
 
   /** Opens (or closes) the reaction bar of a message, from its react button. */
   function toggleReactions(message: Message, button: HTMLElement) {
-    // The bar sits above the message, unless the message is at the very top of
-    // the list, where the bar would be cut off: then it goes underneath.
-    const list = listRef.current;
-    if (list) {
+    // The bar sits above the message, unless the message is right under the
+    // header, where the bar would be hidden: then it goes underneath.
+    const top = topRef.current;
+    if (top) {
       const fromTop =
-        button.getBoundingClientRect().top - list.getBoundingClientRect().top;
+        button.getBoundingClientRect().top - top.getBoundingClientRect().bottom;
       setReactingBelow(fromTop < 64);
     }
     setReactingId((id) => (id === message.id ? null : message.id));
@@ -714,7 +735,8 @@ export default function ChatWindow({
     senderId === me.id ? "You" : nameOf(user);
 
   return (
-    <section className="chat-conversation relative flex min-h-0 min-w-0 flex-col bg-chat">
+    <section className="chat-conversation liquid-glass glass-pane flex min-h-0 min-w-0 flex-col">
+      <div ref={topRef} className="chat-top">
       <header className={ui.header}>
         <button
           className={cx(ui.iconBtn, "-ml-1.5 size-11 md:hidden")}
@@ -724,7 +746,7 @@ export default function ChatWindow({
           <ChevronLeft className="size-6" />
         </button>
         <button
-          className="-m-1.5 flex min-w-0 items-center gap-3 rounded-xl p-1.5 text-left transition-colors hover:bg-panel-2"
+          className="-m-1.5 flex min-w-0 items-center gap-3 rounded-[18px] p-1.5 text-left transition-colors hover:bg-panel-2"
           onClick={onShowProfile}
           aria-label={`View ${nameOf(user)}'s profile`}
         >
@@ -761,11 +783,12 @@ export default function ChatWindow({
       {!connected && (
         <div
           role="status"
-          className="flex items-center justify-center gap-2 border-b border-line bg-accent-soft px-4 py-2 text-xs text-accent"
+          className="liquid-glass glass-thick relative mx-auto mt-2 flex w-fit animate-pop items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-medium text-accent"
         >
           <WifiOff className="size-4" /> Reconnecting. Your draft is safe here.
         </div>
       )}
+      </div>
 
       {/* The first child's auto top margin keeps short conversations pinned to the bottom. */}
       <div
@@ -823,8 +846,8 @@ export default function ChatWindow({
             isSameDay(m.createdAt, next.createdAt) &&
             msBetween(m.createdAt, next.createdAt) < GROUP_GAP_MS;
           const bubbleTone = mine
-            ? "message-bubble-own rounded-br-md bg-linear-to-br from-fill to-fill-2 text-white"
-            : "message-bubble rounded-bl-md bg-bubble shadow-bubble";
+            ? "message-bubble-own rounded-br-md"
+            : "message-bubble rounded-bl-md";
           const canDelete =
             mine && msBetween(m.createdAt, now) < DELETE_WINDOW_MS;
           const quote = m.replyTo && (
@@ -837,10 +860,10 @@ export default function ChatWindow({
           );
 
           return (
-            <div key={m.id} className="message-entry">
+            <div key={m.id} className="message-entry" data-mine={mine}>
               {newDay && (
-                <div className="mt-6 mb-5 flex items-center gap-4 before:h-px before:flex-1 before:bg-line/70 after:h-px after:flex-1 after:bg-line/70">
-                  <span className="px-2 text-[11px] font-medium text-muted">
+                <div className="mt-6 mb-4 flex justify-center">
+                  <span className="day-pill liquid-glass">
                     {formatDay(m.createdAt)}
                   </span>
                 </div>
@@ -964,10 +987,10 @@ export default function ChatWindow({
                               key={emoji}
                               type="button"
                               className={cx(
-                                "flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm shadow-bubble transition-transform hover:scale-105",
+                                "reaction-chip flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm shadow-bubble",
                                 byMe
-                                  ? "border-accent/60 bg-accent-soft"
-                                  : "border-transparent bg-panel",
+                                  ? "border-accent/50 bg-accent-soft"
+                                  : "border-[var(--glass-edge)] bg-glass-strong",
                               )}
                               onClick={() => void react(m, emoji)}
                               title={who}
@@ -1050,7 +1073,7 @@ export default function ChatWindow({
                       <div
                         data-reaction-bar
                         className={cx(
-                          "absolute z-10 flex w-max max-w-[calc(100vw-1.75rem)] animate-pop flex-wrap items-center gap-0.5 rounded-[22px] border border-line bg-panel p-1 shadow-pop",
+                          "reaction-bar liquid-glass glass-thick absolute z-10 flex w-max max-w-[calc(100vw-1.75rem)] animate-pop flex-wrap items-center gap-0.5 rounded-[24px] p-1",
                           reactingBelow
                             ? "top-full mt-0.5"
                             : "bottom-full mb-0.5",
@@ -1066,7 +1089,7 @@ export default function ChatWindow({
                             type="button"
                             className={cx(
                               barButton,
-                              "text-lg transition-transform hover:scale-125",
+                              "text-lg hover:scale-125",
                               m.reactions.some(
                                 (r) => r.userId === me.id && r.emoji === emoji,
                               ) && "bg-accent-soft",
@@ -1143,7 +1166,7 @@ export default function ChatWindow({
               size={MESSAGE_AVATAR}
             />
             <div
-              className="flex gap-1 rounded-[20px] rounded-bl-md bg-bubble px-4 py-3.5 shadow-bubble"
+              className="message-bubble flex animate-pop gap-1 rounded-[20px] rounded-bl-md px-4 py-3.5"
               aria-label={`${nameOf(user)} is typing`}
             >
               {["0s", "0.15s", "0.3s"].map((delay) => (
@@ -1159,11 +1182,11 @@ export default function ChatWindow({
       </div>
 
       {/* The picker sits outside the <form>, so Enter in its search box doesn't send the message. */}
-      <div ref={composerRef} className="relative">
+      <div ref={composerRef} className="composer-dock">
         {showJump && (
           <button
             type="button"
-            className="absolute right-6 bottom-full z-10 mb-3 flex min-h-11 animate-pop items-center gap-2 rounded-full border border-line bg-panel px-4 text-xs font-semibold text-fg shadow-pop transition hover:bg-panel-2"
+            className="liquid-glass glass-thick absolute right-6 bottom-full z-10 mb-3 flex min-h-11 animate-pop items-center gap-2 rounded-full px-4 text-xs font-semibold text-fg"
             onClick={() => {
               listRef.current?.scrollTo({
                 top: listRef.current.scrollHeight,
@@ -1178,10 +1201,10 @@ export default function ChatWindow({
         )}
         {emojiOpen && (
           <div className="absolute bottom-full left-3 z-10 mb-2 w-[min(350px,calc(100%-1.5rem))] animate-pop">
-            <div className="rounded-2xl shadow-pop">
+            <div className="liquid-glass glass-thick relative overflow-hidden rounded-[24px]">
               <Suspense
                 fallback={
-                  <div className="grid h-95 place-items-center rounded-2xl border border-line bg-panel text-muted">
+                  <div className="grid h-95 place-items-center text-muted">
                     Loading…
                   </div>
                 }
@@ -1196,12 +1219,19 @@ export default function ChatWindow({
           onSubmit={handleSubmit}
         >
           {error && (
-            <p className={cx(ui.error, "basis-full")} role="alert">
+            <p
+              className={cx(
+                ui.error,
+                "liquid-glass glass-thick relative basis-full rounded-2xl px-3.5 py-2",
+              )}
+              role="alert"
+            >
               {error}
             </p>
           )}
           {replyingTo && (
-            <div className="flex basis-full items-center gap-2 rounded-xl border-l-3 border-accent bg-accent-soft/60 py-1.5 pr-1.5 pl-3 text-sm">
+            <div className="liquid-glass glass-thick relative flex basis-full animate-pop items-center gap-3 rounded-[22px] py-1.5 pr-1.5 pl-3 text-sm">
+              <span className="h-8 w-[3px] flex-none rounded-full bg-accent" />
               <div className="min-w-0 flex-1">
                 <div className="font-semibold text-accent">
                   Replying to{" "}
@@ -1227,7 +1257,7 @@ export default function ChatWindow({
                 <img
                   src={attachment.previewUrl}
                   alt="Image to send"
-                  className="block h-20 max-w-40 rounded-xl border border-line object-cover"
+                  className="image-bubble block h-20 max-w-40 animate-pop rounded-2xl object-cover"
                 />
                 {sendingImage ? (
                   <span className="absolute inset-0 grid place-items-center rounded-xl bg-black/50 text-xs font-semibold text-white">
@@ -1236,7 +1266,7 @@ export default function ChatWindow({
                 ) : (
                   <button
                     type="button"
-                    className="absolute -top-2 -right-2 grid size-6 place-items-center rounded-full border border-line bg-panel leading-none text-muted hover:text-fg"
+                    className="glass-control absolute -top-2 -right-2 grid size-6 place-items-center leading-none text-muted hover:text-fg"
                     onClick={() => setAttachment(null)}
                     aria-label="Remove image"
                   >
@@ -1255,7 +1285,7 @@ export default function ChatWindow({
             aria-label="Choose an image to send"
           />
           {/* The text box and its two buttons share one rounded field. */}
-          <div className="composer-field flex min-w-0 basis-full items-end gap-1">
+          <div className="composer-field liquid-glass glass-thick relative flex min-w-0 basis-full items-end gap-1">
             <button
               type="button"
               className={cx(composerButton, "text-muted")}
@@ -1301,7 +1331,7 @@ export default function ChatWindow({
             <button
               className={cx(
                 ui.primaryBase,
-                "send-button grid size-11 flex-none place-items-center rounded-[13px]",
+                "send-button grid size-11 flex-none place-items-center",
               )}
               type="submit"
               disabled={(!draft.trim() && !attachment) || sendingImage}

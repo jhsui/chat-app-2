@@ -75,9 +75,9 @@ export default function ProfileDialog({
         e.target === dialogRef.current && dialogRef.current?.close()
       }
       aria-label={isMe ? "Your profile" : "Profile"}
-      className="profile-dialog m-auto w-[min(440px,calc(100%-2rem))] animate-pop rounded-3xl border border-line bg-panel p-0 text-fg shadow-pop"
+      className="profile-dialog liquid-glass glass-thick m-auto w-[min(440px,calc(100%-2rem))] animate-pop rounded-[32px] p-0 text-fg"
     >
-      <div className="flex items-center justify-between border-b border-line bg-panel-2/60 px-6 py-4">
+      <div className="flex items-center justify-between border-b border-line px-6 py-4">
         <h2 className="font-bold">{isMe ? "Your profile" : "Profile"}</h2>
         <button
           className={cx(ui.iconBtn, "-mr-1.5 size-11")}

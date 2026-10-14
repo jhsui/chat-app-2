@@ -71,7 +71,7 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
               </div>
               <p className="text-sm">Got a minute? I have an idea ✨</p>
             </div>
-            <div className="mt-3 ml-16 rounded-2xl rounded-br-md border border-white/15 bg-[#3866ed] p-4 shadow-xl">
+            <div className="liquid-accent mt-3 ml-16 rounded-2xl rounded-br-md p-4">
               <p className="text-sm">Always. Tell me everything.</p>
               <CheckCheck className="mt-2 ml-auto size-4 text-blue-100" />
             </div>
@@ -81,7 +81,7 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
           Real-time conversations. A little more human.
         </p>
       </section>
-      <section className="relative flex min-h-[calc(100dvh-56px)] flex-col px-6 max-md:min-h-[calc(100dvh-48px)] max-md:px-0">
+      <section className="auth-card liquid-glass glass-pane relative flex min-h-[calc(100dvh-56px)] flex-col px-6 max-md:min-h-[calc(100dvh-48px)] max-md:px-0">
         <div className="flex items-center justify-between py-2">
           <span className="md:invisible">
             <Brand />

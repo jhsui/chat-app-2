@@ -7,14 +7,16 @@ interface EmojiPickerProps {
 }
 
 // The picker's colors, pointed at the app's own theme tokens (styles.css) so it
-// matches in light and dark mode. Defined once: the picker re-renders whenever
+// matches in light and dark mode. Its own background is clear: it sits on the
+// glass panel around it in ChatWindow. Defined once: the picker re-renders whenever
 // it's given a new style object.
 const style = {
-  "--epr-bg-color": "var(--panel)",
-  "--epr-category-label-bg-color": "var(--panel)",
+  "--epr-bg-color": "transparent",
+  "--epr-category-label-bg-color":
+    "color-mix(in srgb, var(--panel) 88%, transparent)",
   "--epr-text-color": "var(--fg)",
   "--epr-category-label-text-color": "var(--muted)",
-  "--epr-picker-border-color": "var(--line)",
+  "--epr-picker-border-color": "transparent",
   "--epr-search-input-bg-color": "var(--panel-2)",
   "--epr-search-input-bg-color-active": "var(--panel-2)",
   "--epr-search-input-text-color": "var(--fg)",
@@ -26,7 +28,7 @@ const style = {
   "--epr-highlight-color": "var(--accent)",
   "--epr-category-icon-active-color": "var(--accent)",
   "--epr-skin-tone-picker-menu-color": "var(--panel)",
-  "--epr-picker-border-radius": "16px",
+  "--epr-picker-border-radius": "24px",
 } as CSSProperties;
 
 /**
