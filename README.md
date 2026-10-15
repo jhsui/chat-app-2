@@ -2,7 +2,7 @@
 
 A real-time chat web app with user accounts and private 1:1 direct messages.
 
-**Stack:** TypeScript everywhere · React 19 + Vite · Tailwind CSS v4 · Lucide icons · Figtree (self-hosted via Fontsource) · Node.js + Express 5 · Socket.IO · PostgreSQL (node-postgres, PGlite for local dev) · bcrypt + JWT (httpOnly cookie)
+**Stack:** TypeScript everywhere · React 19 + Vite · Tailwind CSS v4 · Lucide icons · Node.js + Express 5 · Socket.IO · PostgreSQL (node-postgres, PGlite for local dev) · bcrypt + JWT (httpOnly cookie)
 
 ## Features
 
@@ -13,7 +13,7 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 - Messages arrive instantly over WebSockets and are saved to PostgreSQL
 - **Images:** attach a picture with the image button or paste one from the clipboard; it's shrunk in the browser, stored in a private Supabase Storage bucket that only the two people in the conversation can load from, and opens full-size when clicked
 - Conversation list sorted by latest message, with unread badges
-- Online / offline status, typing indicator, and read receipts: one tick on each message you've sent, two blue ticks once it's been seen
+- Online / offline status, typing indicator, and read receipts: "Sent", then "Read" and the time, under your latest message (hover any of your messages for when it was sent and read)
 - **Replies:** hover a message (or tap its smiley button on a phone) to reply to it; the reply shows a quote of the original, and clicking the quote jumps to it
 - **Reactions:** react to any message with 👍 ❤️ 😂 😮 😢 🙏, or any other emoji from the full picker via "+" (one per person per message; pick it again to take it back). They appear under the message for both people straight away
 - **Delete:** remove a message you sent, for both people, up to 2 days after sending it. It leaves a "This message was deleted" placeholder, and a deleted picture's file is removed from storage
@@ -22,7 +22,8 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 - Per-chat drafts: unsent text stays with its chat when you switch, with a "Draft: …" preview in the sidebar (kept until you reload)
 - Message history with "load older" pagination
 - Works across multiple tabs, reconnects automatically, light/dark/system appearance with a saved preference, and a mobile layout
-- Responsive messaging workspace, keyboard-accessible tabs, reduced-motion support, loading skeletons, and a **Latest messages** shortcut when reading history
+- A Messages-style layout: your bubbles in the accent color (a deep teal), theirs in grey, a tail on the last bubble of each run, reactions pinned to the bubble's corner, and the date and time over the first message of the day and after a long pause. A message you send rises out of the message box into place, and on wide screens the conversation sits in a centred column
+- Responsive layout, keyboard-accessible tabs, reduced-motion support, loading skeletons, and a jump-to-latest button when reading history
 
 ## Getting started
 
@@ -114,9 +115,9 @@ To run it like production on one port: `npm run build && JWT_SECRET=something-lo
 ## Styling (Tailwind CSS v4)
 
 - Styles are Tailwind utility classes written directly in the JSX. Tailwind runs as a Vite plugin (`@tailwindcss/vite`), so there's no separate config file or PostCSS setup.
-- **Theme tokens** live in `client/src/styles.css`: colors are CSS variables on `:root`, swapped for dark mode by `[data-theme="dark"]`, and exposed to Tailwind through `@theme`. That gives custom utilities like `bg-panel`, `bg-chat`, `text-muted`, `border-line`, `bg-accent`, `bg-bubble`, so components don't need `dark:` variants for colors. Use `--accent` for links and selection highlights; `--fill` and `--fill-2` control the gradient on your own bubbles and primary buttons. The same file defines the shadows (`shadow-bubble`, `shadow-card`, `shadow-pop`) and the page background.
-- **Appearance:** `client/src/theme.tsx` provides light, dark, and system modes. The appearance menu offers all three modes and saves the preference in local storage, synchronized across browser tabs. CSS uses semantic color variables for both themes, and animations respect `prefers-reduced-motion`. Shared layouts, message controls, and auth illustrations are in `styles.css`.
-- **Font:** Figtree, loaded from the `@fontsource-variable/figtree` package, so the font files are served by the app itself and it looks the same on every device. To change it, swap the two `@import` lines and `--font-sans` in `styles.css`.
+- **Theme tokens** live in `client/src/styles.css`: colors are CSS variables on `:root`, swapped for dark mode by `[data-theme="dark"]`, and exposed to Tailwind through `@theme`. That gives custom utilities like `bg-panel`, `bg-chat`, `text-muted`, `border-line`, `bg-fill`, `bg-bubble`, so components don't need `dark:` variants for colors. `--fill` is the solid accent behind white text (your bubbles, primary buttons); `--accent` is the accent for text, icons and focus rings; `--bubble` is the other person's bubbles. Surfaces are flat: solid colors, hairline borders, and one shadow (`shadow-pop`) for menus and dialogs.
+- **Appearance:** `client/src/theme.tsx` provides light, dark, and system modes. Dark is the default on a first visit; the appearance menu offers all three modes and saves the choice in local storage, synchronized across browser tabs. A small inline script in `client/index.html` applies the saved choice before the first paint, so the page never flashes the wrong colours while it loads. CSS uses semantic color variables for both themes, and animations respect `prefers-reduced-motion`. The few things utilities can't express (the bubble tails, reactions, the segmented control, menus and dialogs) are classes in `styles.css`.
+- **Font:** the device's system font (San Francisco on Apple devices, Segoe UI on Windows, Roboto on Android), set as `--font-sans` in `styles.css`. Nothing to download.
 - **Icons:** [Lucide](https://lucide.dev) (`lucide-react`). Import the ones you need by name, e.g. `import { Send } from "lucide-react"`; only those end up in the bundle.
 - `md` is set to 720px: below it (`max-md:`), the app shows one pane at a time.
 - **Shared classes** used in several components (buttons, inputs, headers) are strings in `client/src/ui.ts`; `cx()` joins class names conditionally.

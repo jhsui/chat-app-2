@@ -32,7 +32,7 @@ export default function Avatar({ name, src, online, size = 40 }: AvatarProps) {
   return (
     <span
       className={cx(
-        "relative inline-grid flex-none place-items-center rounded-full font-bold",
+        "relative inline-grid flex-none place-items-center rounded-full font-semibold",
         "bg-[hsl(var(--hue)_70%_88%)] text-[hsl(var(--hue)_55%_30%)]",
         "dark:bg-[hsl(var(--hue)_35%_28%)] dark:text-[hsl(var(--hue)_70%_85%)]",
       )}
@@ -49,10 +49,12 @@ export default function Avatar({ name, src, online, size = 40 }: AvatarProps) {
       ) : (
         name.charAt(0).toUpperCase()
       )}
+      {/* The dot's ring is the colour of whatever the avatar sits on, which
+          containers set as --surface (dialogs and cards by default). */}
       {online !== undefined && (
         <span
           className={cx(
-            "absolute -right-px -bottom-px size-3 rounded-full border-2 border-panel",
+            "absolute -right-px -bottom-px size-3 rounded-full border-2 border-[var(--surface,var(--panel))]",
             online ? "bg-online" : "bg-muted opacity-0",
           )}
         />

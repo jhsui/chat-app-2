@@ -1,17 +1,9 @@
 import { useRef, useState, type ReactNode } from "react";
-import {
-  LogOut,
-  Search,
-  SquarePen,
-  MessageCircle,
-  Users,
-  ArrowUpRight,
-} from "lucide-react";
+import { LogOut, Search, SquarePen } from "lucide-react";
 import type { Conversation, Person, PublicUser } from "../../../shared/types";
 import { formatShort, nameOf } from "../format.ts";
 import { cx, ui } from "../ui.ts";
 import Avatar from "./Avatar.tsx";
-import Brand from "./Brand.tsx";
 import { ThemeButton } from "../theme.tsx";
 import { useListGlide } from "../motion.ts";
 
@@ -30,24 +22,22 @@ interface SidebarProps {
   isOnline: (user: { id: number; online?: boolean }) => boolean;
   connected: boolean;
   onSelect: (user: PublicUser) => void;
-  /** Opens your own profile (from your avatar/name in the header). */
+  /** Opens your own profile (from your avatar/name in the footer). */
   onShowProfile: () => void;
   onLogout: () => void;
 }
 
 // Classes for the rows in both lists.
 const row = {
-  item: () => "conversation-row",
-  text: "flex min-w-0 flex-1 flex-col gap-1",
-  line: "flex items-center justify-between gap-2",
-  title: "truncate font-semibold",
+  text: "flex min-w-0 flex-1 flex-col",
+  line: "flex items-baseline justify-between gap-2",
+  title: "truncate text-[15px] font-semibold tracking-[-0.01em]",
   sub: (unread: boolean) =>
-    cx("truncate text-sm", unread ? "font-semibold text-fg" : "text-muted"),
-  time: "flex-none text-xs text-muted",
-  typing: "text-accent",
-  section:
-    "px-2.5 pt-4 pb-1.5 text-[0.7rem] font-bold tracking-widest text-muted uppercase",
-  empty: "px-4 py-6 text-center text-sm text-muted",
+    cx("truncate text-[13px]", unread ? "font-medium text-fg" : "text-muted"),
+  time: "flex-none text-xs text-muted tabular-nums",
+  typing: "text-accent italic",
+  section: "px-2.5 pt-3 pb-1 text-xs font-semibold text-muted",
+  empty: "px-4 py-8 text-center text-sm text-muted",
 };
 
 /** Preview line for a chat you've typed in but not sent. */
@@ -63,7 +53,7 @@ function UnreadBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span
-      className="liquid-accent unread-badge grid h-5 min-w-5 flex-none place-items-center rounded-full px-1.5 text-xs font-bold"
+      className="grid h-5 min-w-5 flex-none place-items-center rounded-full bg-fill px-1.5 text-[11px] font-semibold text-white"
       aria-label={`${count} unread`}
     >
       {count > 99 ? "99+" : count}
@@ -132,7 +122,6 @@ export default function Sidebar({
   // The open chat's draft is already on screen, in its text box.
   const draftOf = (userId: number) =>
     userId === activeId ? undefined : drafts.get(userId);
-  const onlineCount = people.filter((p) => isOnline(p)).length;
   const q = query.trim().toLowerCase();
 
   // Both lists are narrowed by the search box, by username or display name.
@@ -140,36 +129,20 @@ export default function Sidebar({
     `${u.username} ${u.displayName ?? ""}`.toLowerCase().includes(q);
   const filteredConversations = conversations.filter(matches);
   const filteredPeople = people.filter(matches);
-  const tabClass = (selected: boolean) =>
-    cx(
-      "flex min-h-10 flex-1 items-center justify-center gap-2 text-[13px] font-semibold transition-colors duration-300",
-      selected ? "text-fg" : "text-muted hover:text-fg",
-    );
 
   return (
     // On narrow screens the sidebar hides while a chat is open.
     <aside
       className={cx(
-        "sidebar liquid-glass glass-pane flex min-h-0 min-w-0 flex-col",
+        "flex min-h-0 min-w-0 flex-col border-r border-line bg-sidebar [--surface:var(--sidebar)] max-md:border-r-0",
         activeId !== undefined && "max-md:hidden",
       )}
     >
-      <header className="flex min-h-22 items-center justify-between px-6">
-        <Brand />
-        <ThemeButton />
-      </header>
-      <div className="flex items-center justify-between px-6 pt-5 pb-5">
-        <div>
-          <h1 className="text-[27px] leading-tight font-bold tracking-tight">
-            Messages
-          </h1>
-        </div>
+      <header className="flex items-center justify-between px-4 pt-4 pb-3">
+        <h1 className="text-[22px] font-bold tracking-[-0.02em]">Messages</h1>
         <button
           type="button"
-          className={cx(
-            ui.primaryBase,
-            "grid size-11 place-items-center rounded-full",
-          )}
+          className={cx(ui.iconBtn, "size-9 text-accent hover:enabled:text-accent")}
           onClick={() => {
             switchTab("people");
             searchRef.current?.focus();
@@ -179,16 +152,14 @@ export default function Sidebar({
         >
           <SquarePen className="size-5" />
         </button>
-      </div>
-      <div className="relative mx-5 mb-5">
-        <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted" />
+      </header>
+      <div className="relative mx-3">
+        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted" />
         <input
           ref={searchRef}
           type="search"
-          className={cx(ui.input, "h-11 pl-10 text-[13px]")}
-          placeholder={
-            tab === "chats" ? "Search conversations" : "Find someone to talk to"
-          }
+          className="h-8 w-full rounded-lg bg-panel-2 pr-2 pl-8 text-sm outline-none placeholder:text-muted focus:ring-3 focus:ring-accent-soft"
+          placeholder="Search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label={
@@ -197,8 +168,7 @@ export default function Sidebar({
         />
       </div>
       <div
-        className="glass-tabs mx-5 flex gap-1 p-1"
-        data-tab={tab}
+        className="segmented mx-3 mt-3"
         role="tablist"
         aria-label="Sidebar"
         onKeyDown={(e) => {
@@ -219,21 +189,15 @@ export default function Sidebar({
             ?.focus();
         }}
       >
-        {/* The lens that slides under the selected tab. */}
-        <span className="tab-glider" aria-hidden="true" />
         <button
           id="tab-chats"
           role="tab"
           aria-controls="sidebar-list"
           aria-selected={tab === "chats"}
           tabIndex={tab === "chats" ? 0 : -1}
-          className={tabClass(tab === "chats")}
           onClick={() => switchTab("chats")}
         >
-          <MessageCircle className="size-4" /> Chats
-          <span className="rounded-full bg-panel-2 px-1.5 text-[11px] text-muted">
-            {conversations.length}
-          </span>
+          Chats
         </button>
         <button
           id="tab-people"
@@ -241,35 +205,18 @@ export default function Sidebar({
           aria-controls="sidebar-list"
           aria-selected={tab === "people"}
           tabIndex={tab === "people" ? 0 : -1}
-          className={tabClass(tab === "people")}
           onClick={() => switchTab("people")}
         >
-          <Users className="size-4" /> People
-          {onlineCount > 0 && (
-            <span
-              className="size-1.5 rounded-full bg-online"
-              aria-label={`${onlineCount} online`}
-            />
-          )}
+          People
         </button>
       </div>
-      <div className="flex items-center justify-between px-6 pt-6 pb-2">
-        <span className="eyebrow">
-          {tab === "chats" ? "Your conversations" : "Your community"}
-        </span>
-        <span className="text-[11px] text-muted">
-          {tab === "chats"
-            ? filteredConversations.length
-            : filteredPeople.length}
-        </span>
-      </div>
-      {/* Keyed by tab, so switching tabs slides the new list in. */}
+      {/* Keyed by tab, so switching tabs starts a fresh list. */}
       <ul
         key={tab}
         ref={listRef}
         id="sidebar-list"
         aria-labelledby={`tab-${tab}`}
-        className="tab-panel min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pt-1 pb-4"
+        className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
         role="tabpanel"
       >
         {tab === "people" ? (
@@ -289,16 +236,16 @@ export default function Sidebar({
               const unread = unreadById.get(c.id) ?? 0;
               const draft = draftOf(c.id);
               const preview = typing[c.id] ? (
-                <em className={row.typing}>typing…</em>
+                <span className={row.typing}>typing…</span>
               ) : draft ? (
                 <DraftPreview text={draft} />
               ) : (
-                `${c.lastSenderId === me.id ? "You: " : ""}${c.lastIsDeleted ? "Message deleted" : c.lastIsImage ? "📷 Photo" : c.lastBody}`
+                `${c.lastSenderId === me.id ? "You: " : ""}${c.lastIsDeleted ? "Message deleted" : c.lastIsImage ? "Photo" : c.lastBody}`
               );
               return (
                 <li key={c.id} data-glide-id={c.id}>
                   <button
-                    className={row.item()}
+                    className="conversation-row"
                     data-active={c.id === activeId}
                     aria-current={c.id === activeId ? "true" : undefined}
                     data-name={c.username}
@@ -308,7 +255,7 @@ export default function Sidebar({
                       name={nameOf(c)}
                       src={c.avatarUrl}
                       online={isOnline(c)}
-                      size={44}
+                      size={40}
                     />
                     <span className={row.text}>
                       <span className={row.line}>
@@ -328,50 +275,46 @@ export default function Sidebar({
             })}
             {filteredConversations.length === 0 && (
               <li className={row.empty}>
-                <MessageCircle className="mx-auto mb-3 size-7 text-accent" />
-                <p className="font-semibold text-fg">
-                  {q
-                    ? "No conversations found"
-                    : "Your next conversation starts here"}
-                </p>
-                <p className="mt-1">
-                  {q
-                    ? "Try another name, or find someone in People."
-                    : "Find someone and send your first hello."}
-                </p>
-                <button
-                  className="mt-4 inline-flex items-center gap-1 font-semibold text-accent"
-                  onClick={() => switchTab("people")}
-                >
-                  Explore people <ArrowUpRight className="size-4" />
-                </button>
+                {q ? (
+                  "No results"
+                ) : (
+                  <>
+                    <p>No conversations yet.</p>
+                    <button
+                      className="mt-2 font-medium text-accent hover:underline"
+                      onClick={() => switchTab("people")}
+                    >
+                      Find someone to message
+                    </button>
+                  </>
+                )}
               </li>
             )}
           </>
         )}
       </ul>
-      <footer className="liquid-glass glass-thick relative m-3 mt-1 flex items-center gap-2 rounded-[26px] p-1.5">
+      <footer className="flex items-center gap-1 border-t border-line p-2">
         <button
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-[20px] p-1.5 text-left transition hover:bg-panel-2"
+          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-1.5 text-left transition-colors hover:bg-panel-2"
           onClick={onShowProfile}
           aria-label="Your profile"
         >
-          <Avatar name={nameOf(me)} src={me.avatarUrl} size={38} />
-          <span className="flex min-w-0 flex-col gap-0.5">
-            <strong className="truncate text-[13px]">{nameOf(me)}</strong>
-            <span className="flex items-center gap-1.5 text-xs text-muted">
-              <span
-                className={cx(
-                  "size-1.5 rounded-full",
-                  connected ? "bg-online" : "bg-danger",
-                )}
-              />
+          <Avatar
+            name={nameOf(me)}
+            src={me.avatarUrl}
+            online={connected}
+            size={32}
+          />
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-sm font-medium">{nameOf(me)}</span>
+            <span className="text-xs text-muted">
               {connected ? "Online" : "Reconnecting…"}
             </span>
           </span>
         </button>
+        <ThemeButton />
         <button
-          className={cx(ui.iconBtn, "size-11")}
+          className={cx(ui.iconBtn, "size-9")}
           onClick={onLogout}
           aria-label="Log out"
           title="Log out"
@@ -408,9 +351,7 @@ function PeopleList({
   if (people.length === 0) {
     return (
       <li className={row.empty}>
-        {filtered
-          ? "No one matches that name."
-          : "No one else has signed up yet. Invite a friend!"}
+        {filtered ? "No results" : "No one else has signed up yet."}
       </li>
     );
   }
@@ -425,13 +366,13 @@ function PeopleList({
     return (
       <li key={p.id} data-glide-id={p.id}>
         <button
-          className={row.item()}
+          className="conversation-row"
           data-active={p.id === activeId}
           aria-current={p.id === activeId ? "true" : undefined}
           data-name={p.username}
           onClick={() => onSelect(p)}
         >
-          <Avatar name={nameOf(p)} src={p.avatarUrl} online={isOn} size={44} />
+          <Avatar name={nameOf(p)} src={p.avatarUrl} online={isOn} size={40} />
           <span className={row.text}>
             <span className={row.line}>
               <span className={row.title}>{nameOf(p)}</span>
@@ -442,13 +383,11 @@ function PeopleList({
             <span className={row.line}>
               <span className={row.sub(unread > 0)}>
                 {typing[p.id] ? (
-                  <em className={row.typing}>typing…</em>
+                  <span className={row.typing}>typing…</span>
                 ) : draft ? (
                   <DraftPreview text={draft} />
-                ) : isOn ? (
-                  "Online"
                 ) : (
-                  "Offline"
+                  `@${p.username}`
                 )}
               </span>
               <UnreadBadge count={unread} />
@@ -462,11 +401,11 @@ function PeopleList({
   return (
     <>
       {online.length > 0 && (
-        <li className={row.section}>Online — {online.length}</li>
+        <li className={row.section}>Online · {online.length}</li>
       )}
       {online.map(renderPerson)}
       {offline.length > 0 && (
-        <li className={row.section}>Offline — {offline.length}</li>
+        <li className={row.section}>Offline · {offline.length}</li>
       )}
       {offline.map(renderPerson)}
     </>

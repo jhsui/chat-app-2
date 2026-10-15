@@ -13,15 +13,13 @@ import {
 } from "react";
 import {
   ArrowDown,
-  ArrowUpRight,
+  ArrowUp,
   WifiOff,
-  Check,
-  CheckCheck,
   ChevronLeft,
+  ChevronRight,
   Image as ImageIcon,
   Plus,
   Reply as ReplyIcon,
-  Send,
   Smile as SmileIcon,
   Trash2 as TrashIcon,
   X,
@@ -47,7 +45,6 @@ import { cx, ui } from "../ui.ts";
 import Avatar from "./Avatar.tsx";
 import ImageViewer from "./ImageViewer.tsx";
 import DeleteMessageDialog from "./DeleteMessageDialog.tsx";
-import { ThemeButton } from "../theme.tsx";
 
 // Downloaded the first time the picker is opened, not with the rest of the app.
 const EmojiPicker = lazy(() => import("./EmojiPicker.tsx"));
@@ -62,35 +59,40 @@ const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 // can't hover: there only the react button is shown (always), and the bar it
 // opens offers reply and delete too.
 const messageAction =
-  "grid size-8 flex-none place-items-center rounded-full transition [@media(hover:none)]:size-10";
+  "grid size-7 flex-none place-items-center rounded-full transition [@media(hover:none)]:size-9";
 // Two separate looks, never combined, so their colors can't clash.
 const actionIdle =
-  "text-muted opacity-0 group-hover:opacity-100 hover:bg-glass-strong hover:text-fg hover:shadow-bubble focus-visible:opacity-100 active:scale-90 [@media(hover:none)]:opacity-70";
-const actionOpen = "bg-glass-strong text-accent opacity-100 shadow-bubble";
+  "text-muted opacity-0 group-hover:opacity-100 hover:bg-panel-2 hover:text-fg focus-visible:opacity-100 [@media(hover:none)]:opacity-70";
+const actionOpen = "bg-panel-2 text-accent opacity-100";
 const onlyWithHover = "[@media(hover:none)]:hidden";
 const onlyOnTouch = "[@media(hover:hover)]:hidden";
 // A button in the reaction bar. Slightly smaller on the narrowest phones, so
 // the whole bar (with reply and delete) still fits on one line.
 const barButton =
   "grid size-8 place-items-center rounded-full max-[350px]:size-7";
-// The image and emoji buttons inside the message box.
+// The attach and emoji buttons beside and inside the message box.
 const composerButton =
-  "grid size-11 flex-none place-items-center rounded-full transition hover:enabled:bg-panel-2 hover:enabled:text-accent active:enabled:scale-90 disabled:opacity-50";
+  "grid size-9 flex-none place-items-center rounded-full text-muted transition-colors hover:enabled:text-fg disabled:opacity-50";
 
+/** Messages closer together than this, from the same person, form one run of bubbles. */
 const GROUP_GAP_MS = 5 * 60 * 1000;
+/** A pause this long gets a date and time over the next message. */
+const STAMP_GAP_MS = 60 * 60 * 1000;
+/** My messages arriving this soon after I press Send here rise out of the message box. */
+const SEND_RISE_WINDOW_MS = 10_000;
 /** Size of the avatar beside each run of messages, in pixels. */
 const MESSAGE_AVATAR = 28;
 /** The largest a picture is shown inside the chat, in pixels. */
 const MAX_THUMB = { width: 280, height: 320 };
 
 /**
- * The sender's avatar beside the first message of a run, lined up with the
- * bubble's first line. The rest of the run gets an empty space of the same
- * width (`show` false), so the bubbles stay in a column.
+ * Their avatar beside the last message of a run, next to the bubble's tail.
+ * The rest of the run gets an empty space of the same width (`show` false),
+ * so the bubbles stay in a column.
  */
 function MessageAvatar({ user, show }: { user: PublicUser; show: boolean }) {
   return (
-    <div className="mt-1 flex flex-none" style={{ width: MESSAGE_AVATAR }}>
+    <div className="flex flex-none self-end" style={{ width: MESSAGE_AVATAR }}>
       {show && (
         <Avatar
           name={nameOf(user)}
@@ -123,7 +125,7 @@ function ImageBubble({
   return (
     <button
       type="button"
-      className="image-bubble block max-w-full overflow-hidden rounded-[22px] bg-panel-2"
+      className="block max-w-full overflow-hidden rounded-[18px] bg-panel-2"
       title={title}
       onClick={onOpen}
       aria-label="View image"
@@ -142,26 +144,26 @@ function ImageBubble({
   );
 }
 
+/** When a message I sent was sent, and seen if it has been, for its tooltip. */
+function sentLabel(message: Message): string {
+  const sent = `Sent ${formatDateTime(message.createdAt)}`;
+  return message.readAt
+    ? `${sent}\nRead ${formatDateTime(message.readAt)}`
+    : sent;
+}
+
 /**
- * The status of a message I sent, shown in its corner: one tick once the
- * server has it, two blue ticks once the other person has seen it. Hovering
- * shows when it was seen, or when it was sent if it hasn't been seen yet.
+ * Under my latest message, while it's the last one in the chat: "Read" and
+ * when, once the other person has seen it, "Sent" until then.
  */
-function Ticks({ message }: { message: Message }) {
-  const seen = message.readAt !== null;
-  const label = message.readAt
-    ? `Seen ${formatDateTime(message.readAt)}`
-    : `Sent ${formatDateTime(message.createdAt)}`;
-  const Icon = seen ? CheckCheck : Check;
+function Receipt({ message }: { message: Message }) {
+  const { readAt } = message;
   return (
-    <Icon
-      role="img"
-      aria-label={label}
-      strokeWidth={2.4}
-      className={cx("size-4", seen ? "text-sky-300" : "text-white/75")}
-    >
-      <title>{label}</title>
-    </Icon>
+    <div className="mt-1 px-1 text-[11px] text-muted tabular-nums" role="status">
+      <span className="font-semibold">{readAt ? "Read" : "Sent"}</span>
+      {readAt &&
+        ` ${isSameDay(readAt, new Date().toISOString()) ? formatTime(readAt) : formatDay(readAt)}`}
+    </div>
   );
 }
 
@@ -220,7 +222,7 @@ function LinkPreviewCard({ preview }: { preview: LinkPreview }) {
       href={preview.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="link-card message-bubble block w-80 max-w-full overflow-hidden rounded-[20px]"
+      className="block w-72 max-w-full overflow-hidden rounded-[18px] bg-bubble text-fg"
     >
       {/* A fixed height, so the chat doesn't jump when the picture loads. The
           picture comes straight from the other site; no-referrer keeps this
@@ -231,23 +233,20 @@ function LinkPreviewCard({ preview }: { preview: LinkPreview }) {
           alt=""
           loading="lazy"
           referrerPolicy="no-referrer"
-          className="h-36 w-full border-b border-line bg-panel-2 object-cover"
+          className="h-36 w-full bg-panel-2 object-cover"
           onError={() => setImageFailed(true)}
         />
       )}
-      <span className="block p-3.5">
-        <span className="mb-1.5 flex items-center justify-between gap-3 text-[11px] font-medium text-muted">
-          <span className="truncate">{host}</span>
-          <ArrowUpRight className="size-3.5 flex-none" />
-        </span>
+      <span className="block px-3 py-2.5">
         <span className="line-clamp-2 text-sm leading-snug font-semibold">
           {preview.title}
         </span>
         {preview.description && preview.description !== preview.title && (
-          <span className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">
+          <span className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted">
             {preview.description}
           </span>
         )}
+        <span className="mt-1 block truncate text-xs text-muted">{host}</span>
       </span>
     </a>
   );
@@ -272,7 +271,7 @@ function ReplyQuote({
       type="button"
       onClick={onJump}
       className={cx(
-        "flex w-full items-center gap-2 rounded-lg border-l-3 px-2 py-1 text-left text-sm whitespace-normal",
+        "flex w-full items-center gap-2 rounded-md border-l-3 px-2 py-1 text-left text-sm whitespace-normal",
         onAccent
           ? "border-white/70 bg-white/15"
           : "border-accent bg-black/5 dark:bg-white/10",
@@ -362,6 +361,13 @@ export default function ChatWindow({
 }: ChatWindowProps) {
   const [draft, setDraft] = useState(initialDraft);
   const [showJump, setShowJump] = useState(false);
+  // Whether messages are scrolled out of sight under the header or the
+  // message box, which then show a hairline and a soft shadow.
+  const [underTop, setUnderTop] = useState(false);
+  const [underBottom, setUnderBottom] = useState(false);
+  // When I last sent something from here, so its arrival can rise out of the
+  // message box (see riseFromComposer).
+  const sentAtRef = useRef(0);
   // The latest draft, readable after an await (state in a closure would be stale).
   const draftRef = useRef(initialDraft);
   // The message being replied to, shown above the text box.
@@ -385,7 +391,7 @@ export default function ChatWindow({
   const [emojiTarget, setEmojiTarget] = useState<"draft" | number | null>(null);
   const emojiOpen = emojiTarget !== null;
   const composerRef = useRef<HTMLDivElement>(null);
-  // The header (and the reconnecting notice under it), floating over the list.
+  // The header and the reconnecting notice under it.
   const topRef = useRef<HTMLDivElement>(null);
   // Where to put the cursor once an inserted emoji is in the text box.
   const caretRef = useRef<number | null>(null);
@@ -419,11 +425,20 @@ export default function ChatWindow({
       const mine = messages.at(-1)?.senderId === me.id;
       if (s.nearBottom || mine || s.lastId === null)
         el.scrollTop = el.scrollHeight;
+      // Something I just sent from here (not the chat loading, not my other tabs).
+      if (
+        mine &&
+        lastId !== null &&
+        s.lastId !== null &&
+        performance.now() - sentAtRef.current < SEND_RISE_WINDOW_MS
+      )
+        riseFromComposer(lastId);
     } else if (s.nearBottom && el.scrollHeight > s.height) {
       // Same messages but taller, e.g. a reaction added under the last one.
       el.scrollTop = el.scrollHeight;
     }
     setShowJump(el.scrollHeight - el.scrollTop - el.clientHeight >= 80);
+    updateEdges(el);
     scrollState.current = { ...s, firstId, lastId, height: el.scrollHeight };
   }, [messages, me.id]);
 
@@ -434,27 +449,9 @@ export default function ChatWindow({
     if (!el) return;
     const observer = new ResizeObserver(() => {
       if (scrollState.current.nearBottom) el.scrollTop = el.scrollHeight;
+      updateEdges(el);
     });
     observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  // The header and the message box float over the list, which scrolls under
-  // them. The list is padded by their heights so its first and last messages
-  // can still be scrolled clear of them, and stays pinned to the bottom when
-  // the message box grows (a reply, a picture, more lines of text).
-  useLayoutEffect(() => {
-    const list = listRef.current;
-    const top = topRef.current;
-    const dock = composerRef.current;
-    if (!list || !top || !dock) return;
-    const observer = new ResizeObserver(() => {
-      list.style.setProperty("--top-h", `${top.offsetHeight}px`);
-      list.style.setProperty("--composer-h", `${dock.offsetHeight}px`);
-      if (scrollState.current.nearBottom) list.scrollTop = list.scrollHeight;
-    });
-    observer.observe(top);
-    observer.observe(dock);
     return () => observer.disconnect();
   }, []);
 
@@ -494,7 +491,41 @@ export default function ChatWindow({
       el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     scrollState.current.height = el.scrollHeight;
     setShowJump(!scrollState.current.nearBottom);
+    updateEdges(el);
     if (el.scrollTop < 40 && hasMore && !loading) onLoadOlder();
+  }
+
+  function updateEdges(el: HTMLElement) {
+    setUnderTop(el.scrollTop > 1);
+    setUnderBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 1);
+  }
+
+  /**
+   * A message I just sent rises out of the message box into its place,
+   * settling with a slight overshoot, instead of the usual fade-in.
+   */
+  function riseFromComposer(messageId: number) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const row = listRef.current?.querySelector<HTMLElement>(
+      `[data-message-id="${messageId}"]`,
+    );
+    const field = inputRef.current?.parentElement;
+    if (!row || !field) return;
+    const from =
+      field.getBoundingClientRect().top - row.getBoundingClientRect().top;
+    if (from <= 0) return;
+    row.parentElement?.getAnimations().forEach((a) => a.cancel());
+    row.animate(
+      [
+        {
+          transform: `translateY(${from}px) scale(0.94)`,
+          transformOrigin: "100% 100%",
+          opacity: 0.5,
+        },
+        { transform: "none", transformOrigin: "100% 100%", opacity: 1 },
+      ],
+      { duration: 380, easing: "cubic-bezier(0.25, 1.25, 0.5, 1)" },
+    );
   }
 
   function stopTyping() {
@@ -692,6 +723,7 @@ export default function ChatWindow({
     stopTyping();
     setEmojiTarget(null);
     inputRef.current?.focus();
+    sentAtRef.current = performance.now();
     try {
       // A picture and text go out as two messages, picture first.
       if (pending) {
@@ -733,66 +765,64 @@ export default function ChatWindow({
   const now = new Date().toISOString();
   const nameFor = (senderId: number) =>
     senderId === me.id ? "You" : nameOf(user);
+  const last = messages.at(-1);
+  const canSend = Boolean(draft.trim() || attachment) && !sendingImage;
 
   return (
-    <section className="chat-conversation liquid-glass glass-pane flex min-h-0 min-w-0 flex-col">
-      <div ref={topRef} className="chat-top">
-      <header className={ui.header}>
-        <button
-          className={cx(ui.iconBtn, "-ml-1.5 size-11 md:hidden")}
-          onClick={onBack}
-          aria-label="Back to conversations"
-        >
-          <ChevronLeft className="size-6" />
-        </button>
-        <button
-          className="-m-1.5 flex min-w-0 items-center gap-3 rounded-[18px] p-1.5 text-left transition-colors hover:bg-panel-2"
-          onClick={onShowProfile}
-          aria-label={`View ${nameOf(user)}'s profile`}
-        >
-          <Avatar
-            name={nameOf(user)}
-            src={user.avatarUrl}
-            online={online}
-            size={40}
-          />
-          <div className={ui.nameBlock}>
-            <strong className="truncate text-[15px] font-bold tracking-tight">
-              {nameOf(user)}
-            </strong>
-            <span
+    <section className="flex min-h-0 min-w-0 flex-col bg-chat">
+      <div
+        ref={topRef}
+        className="scroll-edge relative z-10 flex-none bg-chat [--surface:var(--chat)]"
+        data-edge={underTop ? "top" : undefined}
+      >
+        <header className="grid min-h-14 grid-cols-[1fr_minmax(0,auto)_1fr] items-center px-2">
+          <div>
+            <button
               className={cx(
-                "text-xs",
-                typing
-                  ? "font-medium text-accent"
-                  : online
-                    ? "text-green-600 dark:text-green-400"
-                    : "text-muted",
+                ui.iconBtn,
+                "size-10 text-accent hover:enabled:text-accent md:hidden",
               )}
+              onClick={onBack}
+              aria-label="Back to conversations"
             >
-              {typing ? "Typing a message…" : online ? "Online now" : "Offline"}
-            </span>
+              <ChevronLeft className="size-6" />
+            </button>
           </div>
-        </button>
-        <div className="ml-auto flex items-center gap-1">
-          <span className="md:hidden">
-            <ThemeButton />
-          </span>
-        </div>
-      </header>
-      {!connected && (
-        <div
-          role="status"
-          className="liquid-glass glass-thick relative mx-auto mt-2 flex w-fit animate-pop items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-medium text-accent"
-        >
-          <WifiOff className="size-4" /> Reconnecting. Your draft is safe here.
-        </div>
-      )}
+          <button
+            className="flex min-w-0 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-panel-2"
+            onClick={onShowProfile}
+            aria-label={`View ${nameOf(user)}'s profile`}
+          >
+            <Avatar
+              name={nameOf(user)}
+              src={user.avatarUrl}
+              online={online}
+              size={32}
+            />
+            <span className="flex min-w-0 flex-col">
+              <span className="flex items-center gap-0.5 text-[15px] font-semibold tracking-[-0.01em]">
+                <span className="truncate">{nameOf(user)}</span>
+                <ChevronRight className="size-3.5 flex-none text-muted" />
+              </span>
+              <span className="text-xs text-muted">
+                {typing ? "typing…" : online ? "Online" : "Offline"}
+              </span>
+            </span>
+          </button>
+        </header>
+        {!connected && (
+          <div
+            role="status"
+            className="flex items-center justify-center gap-2 bg-panel-2 py-1.5 text-xs text-muted"
+          >
+            <WifiOff className="size-3.5" /> Reconnecting…
+          </div>
+        )}
       </div>
 
       {/* The first child's auto top margin keeps short conversations pinned to the bottom. */}
       <div
-        className="message-list flex flex-1 flex-col overflow-y-auto *:first:mt-auto"
+        className="chat-column flex flex-1 flex-col overflow-y-auto overscroll-contain pt-4 pb-3 *:first:mt-auto"
         aria-label="Conversation messages"
         aria-busy={loading}
         ref={listRef}
@@ -801,18 +831,18 @@ export default function ChatWindow({
         {loading && messages.length === 0 && (
           <div
             role="status"
-            className="my-auto flex flex-col gap-5 py-6"
+            className="flex flex-col gap-2 py-6"
             aria-label="Loading messages"
           >
-            <div className="skeleton h-12 w-48 max-w-[70%] rounded-2xl" />
-            <div className="skeleton h-18 w-64 max-w-[75%] self-end rounded-2xl" />
-            <div className="skeleton h-12 w-40 max-w-[65%] rounded-2xl" />
+            <div className="h-9 w-48 max-w-[70%] animate-pulse rounded-[18px] bg-bubble" />
+            <div className="h-9 w-60 max-w-[75%] animate-pulse self-end rounded-[18px] bg-bubble" />
+            <div className="h-9 w-40 max-w-[65%] animate-pulse rounded-[18px] bg-bubble" />
             <span className="sr-only">Loading messages…</span>
           </div>
         )}
         {hasMore && (
           <button
-            className={cx(ui.btnGhost, "mb-3 self-center text-sm")}
+            className={cx(ui.btnGhost, "mb-3 self-center text-sm text-accent")}
             onClick={onLoadOlder}
             disabled={loading}
           >
@@ -822,12 +852,9 @@ export default function ChatWindow({
         {!loading && messages.length === 0 && (
           <div className="flex flex-col items-center px-4 py-10 text-center">
             <Avatar name={nameOf(user)} src={user.avatarUrl} size={64} />
-            <h2 className="mt-4 text-xl font-bold tracking-tight">
-              Say hello to {nameOf(user)}
-            </h2>
-            <p className="mt-2 max-w-64 text-sm text-muted">
-              Every great conversation starts somewhere. Make the first move.
-            </p>
+            <h2 className="mt-3 text-lg font-semibold">{nameOf(user)}</h2>
+            <p className="text-sm text-muted">@{user.username}</p>
+            <p className="mt-6 text-sm text-muted">No messages yet.</p>
           </div>
         )}
 
@@ -835,9 +862,14 @@ export default function ChatWindow({
           const prev = messages[i - 1];
           const next = messages[i + 1];
           const mine = m.senderId === me.id;
-          const newDay = !prev || !isSameDay(prev.createdAt, m.createdAt);
+          // The date and time, centred over the first message of a day and
+          // again after a long pause.
+          const stamp =
+            !prev ||
+            !isSameDay(prev.createdAt, m.createdAt) ||
+            msBetween(prev.createdAt, m.createdAt) >= STAMP_GAP_MS;
           const groupedWithPrev =
-            !newDay &&
+            !stamp &&
             prev?.senderId === m.senderId &&
             msBetween(prev.createdAt, m.createdAt) < GROUP_GAP_MS;
           const groupedWithNext =
@@ -845,11 +877,16 @@ export default function ChatWindow({
             next.senderId === m.senderId &&
             isSameDay(m.createdAt, next.createdAt) &&
             msBetween(m.createdAt, next.createdAt) < GROUP_GAP_MS;
-          const bubbleTone = mine
-            ? "message-bubble-own rounded-br-md"
-            : "message-bubble rounded-bl-md";
+          // The last bubble of a run gets the tail (and, for theirs, the avatar).
+          const tail = !groupedWithNext;
+          const bubble = cx(
+            "bubble",
+            mine ? "bubble-mine" : "bubble-theirs",
+            tail && "bubble-tail",
+          );
           const canDelete =
             mine && msBetween(m.createdAt, now) < DELETE_WINDOW_MS;
+          const hasReactions = !m.deletedAt && m.reactions.length > 0;
           const quote = m.replyTo && (
             <ReplyQuote
               reply={m.replyTo}
@@ -858,168 +895,148 @@ export default function ChatWindow({
               onJump={() => jumpTo(m.replyTo!.id)}
             />
           );
+          // A message that's nothing but a link shows just the link's card.
+          const linkOnly =
+            !!m.linkPreview && m.body.trim() === m.linkPreview.url && !quote;
+
+          let content: ReactNode;
+          if (m.deletedAt) {
+            content = (
+              <div
+                className="rounded-[18px] border border-line px-3 py-1.5 text-sm text-muted italic"
+                title={`Deleted ${formatDateTime(m.deletedAt)}`}
+              >
+                {mine ? "You deleted this message" : "This message was deleted"}
+              </div>
+            );
+          } else if (m.image) {
+            content = (
+              <>
+                {quote && (
+                  <div className={cx("bubble mb-0.5 p-1.5", mine ? "bubble-mine" : "bubble-theirs")}>
+                    {quote}
+                  </div>
+                )}
+                <ImageBubble
+                  image={m.image}
+                  title={mine ? sentLabel(m) : formatDateTime(m.createdAt)}
+                  onOpen={() => setViewing(m.image)}
+                />
+              </>
+            );
+          } else if (m.linkPreview && linkOnly) {
+            content = <LinkPreviewCard preview={m.linkPreview} />;
+          } else {
+            content = (
+              <div
+                className={cx(bubble, "whitespace-pre-wrap wrap-anywhere")}
+                title={mine ? sentLabel(m) : formatDateTime(m.createdAt)}
+              >
+                {quote && <div className="mb-1">{quote}</div>}
+                <MessageText text={m.body} onAccent={mine} />
+              </div>
+            );
+          }
 
           return (
-            <div key={m.id} className="message-entry" data-mine={mine}>
-              {newDay && (
-                <div className="mt-6 mb-4 flex justify-center">
-                  <span className="day-pill liquid-glass">
+            <div key={m.id} className="message-entry">
+              {stamp && (
+                <div
+                  className={cx(
+                    "mb-2 text-center text-[11px] text-muted tabular-nums",
+                    i > 0 && "mt-6",
+                  )}
+                >
+                  <span className="font-semibold">
                     {formatDay(m.createdAt)}
-                  </span>
+                  </span>{" "}
+                  {formatTime(m.createdAt)}
                 </div>
               )}
-              {/* Avatar on the outside, then the bubble, then the react and
-                  reply buttons: mine on the right, theirs on the left. */}
+              {/* Their avatar on the outside, then the bubble, then the react
+                  and reply buttons. Mine has no avatar, and sits on the right. */}
               <div
                 data-message-id={m.id}
                 className={cx(
-                  "group relative flex w-fit max-w-full items-start gap-2 rounded-xl transition-colors duration-300",
+                  "group relative flex w-fit max-w-full items-start gap-2 rounded-2xl transition-colors duration-300",
+                  // Room above for the reactions pinned to the bubble's corner.
                   groupedWithPrev
-                    ? m.linkPreview || prev?.linkPreview
-                      ? "mt-2"
-                      : "mt-1"
-                    : "mt-5",
+                    ? hasReactions
+                      ? "mt-4"
+                      : "mt-0.5"
+                    : stamp
+                      ? hasReactions && "mt-4"
+                      : hasReactions
+                        ? "mt-6"
+                        : "mt-2.5",
                   mine && "ml-auto flex-row-reverse",
                   (m.id === highlightId || m.id === emojiTarget) &&
                     "bg-accent-soft",
                 )}
               >
-                <MessageAvatar
-                  user={mine ? me : user}
-                  show={!groupedWithPrev}
-                />
+                {!mine && <MessageAvatar user={user} show={tail} />}
                 <div
                   className={cx(
-                    "flex max-w-[min(65vw,560px)] min-w-0 flex-col max-md:max-w-[calc(100vw-108px)]",
+                    "flex max-w-[min(65vw,520px)] min-w-0 flex-col max-md:max-w-[calc(100vw-108px)]",
                     mine ? "items-end" : "items-start",
                   )}
                 >
-                  {m.deletedAt ? (
-                    <div
-                      className="rounded-[20px] border border-dashed border-line px-3.5 py-2 text-sm text-muted italic"
-                      title={`Deleted ${formatDateTime(m.deletedAt)}`}
-                    >
-                      {mine
-                        ? "You deleted this message"
-                        : "This message was deleted"}
-                    </div>
-                  ) : m.image ? (
-                    <>
-                      {quote && (
-                        <div
-                          className={cx(
-                            "mb-0.5 max-w-full rounded-[20px] p-1.5",
-                            bubbleTone,
-                          )}
-                        >
-                          {quote}
-                        </div>
-                      )}
-                      <div className="relative max-w-full">
-                        <ImageBubble
-                          image={m.image}
-                          title={formatDateTime(m.createdAt)}
-                          onOpen={() => setViewing(m.image)}
-                        />
-                        {mine && (
-                          <span className="absolute right-1.5 bottom-1.5 rounded-full bg-black/50 px-1 py-0.5">
-                            <Ticks message={m} />
-                          </span>
+                  <div className="relative max-w-full">
+                    {content}
+                    {hasReactions && (
+                      <div
+                        className={cx(
+                          "absolute -top-4 flex gap-0.5",
+                          mine ? "-left-3" : "-right-3",
+                        )}
+                      >
+                        {/* One per emoji; clicking it gives (or takes back) the same reaction. */}
+                        {[...new Set(m.reactions.map((r) => r.emoji))].map(
+                          (emoji) => {
+                            const by = m.reactions.filter(
+                              (r) => r.emoji === emoji,
+                            );
+                            const byMe = by.some((r) => r.userId === me.id);
+                            const who = by
+                              .map((r) => nameFor(r.userId))
+                              .join(" and ");
+                            return (
+                              <button
+                                key={emoji}
+                                type="button"
+                                className="tapback"
+                                onClick={() => void react(m, emoji)}
+                                title={who}
+                                aria-label={`${emoji} from ${who}`}
+                                aria-pressed={byMe}
+                              >
+                                {emoji}
+                                {by.length > 1 && (
+                                  <span className="text-[11px] font-semibold">
+                                    {by.length}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          },
                         )}
                       </div>
-                    </>
-                  ) : m.linkPreview &&
-                    m.body.trim() === m.linkPreview.url &&
-                    !quote ? null : (
-                    <div
-                      className={cx(
-                        "relative rounded-[18px] px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap wrap-anywhere",
-                        bubbleTone,
-                      )}
-                      title={formatDateTime(m.createdAt)}
-                    >
-                      {quote && <div className="mb-1.5">{quote}</div>}
-                      <MessageText text={m.body} onAccent={mine} />
-                      {mine && (
-                        <>
-                          {/* An empty space at the end of the text keeps the last
-                              line clear of the ticks, which sit in the corner. */}
-                          <span className="inline-block w-5" />
-                          <span className="absolute right-2.5 bottom-2.5">
-                            <Ticks message={m} />
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  {m.linkPreview && (
-                    <div
-                      className={cx(
-                        "relative max-w-full",
-                        (m.body.trim() !== m.linkPreview.url || quote) &&
-                          "mt-2",
-                      )}
-                    >
+                    )}
+                  </div>
+                  {m.linkPreview && !linkOnly && !m.deletedAt && (
+                    <div className="mt-1 max-w-full">
                       <LinkPreviewCard preview={m.linkPreview} />
-                      {mine &&
-                        m.body.trim() === m.linkPreview.url &&
-                        !quote && (
-                          <span className="mt-1 flex w-fit items-center rounded-full bg-fill px-1.5 py-0.5 ml-auto">
-                            <Ticks message={m} />
-                          </span>
-                        )}
                     </div>
                   )}
-                  {m.reactions.length > 0 && (
-                    <div className="mt-1 flex gap-1">
-                      {/* One chip per emoji; clicking it gives (or takes back) the same reaction. */}
-                      {[...new Set(m.reactions.map((r) => r.emoji))].map(
-                        (emoji) => {
-                          const by = m.reactions.filter(
-                            (r) => r.emoji === emoji,
-                          );
-                          const byMe = by.some((r) => r.userId === me.id);
-                          const who = by
-                            .map((r) => nameFor(r.userId))
-                            .join(" and ");
-                          return (
-                            <button
-                              key={emoji}
-                              type="button"
-                              className={cx(
-                                "reaction-chip flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm shadow-bubble",
-                                byMe
-                                  ? "border-accent/50 bg-accent-soft"
-                                  : "border-[var(--glass-edge)] bg-glass-strong",
-                              )}
-                              onClick={() => void react(m, emoji)}
-                              title={who}
-                              aria-label={`${emoji} from ${who}`}
-                              aria-pressed={byMe}
-                            >
-                              {emoji}
-                              {by.length > 1 && (
-                                <span className="text-xs font-semibold text-muted">
-                                  {by.length}
-                                </span>
-                              )}
-                            </button>
-                          );
-                        },
-                      )}
-                    </div>
-                  )}
-                  {!groupedWithNext && (
-                    <div className="mt-1.5 px-1 text-xs text-muted">
-                      {formatTime(m.createdAt)}
-                    </div>
+                  {mine && m.id === last?.id && !m.deletedAt && (
+                    <Receipt message={m} />
                   )}
                 </div>
                 {/* Nothing can be done with a deleted message. */}
                 {!m.deletedAt && (
                   <>
                     {/* Same order on both sides: react, reply, delete. */}
-                    <div className="mt-1 flex flex-none items-center">
+                    <div className="flex flex-none items-center self-center">
                       <button
                         type="button"
                         data-reaction-bar
@@ -1034,7 +1051,7 @@ export default function ChatWindow({
                         aria-expanded={reactingId === m.id}
                         title="React"
                       >
-                        <SmileIcon className="size-4.5" />
+                        <SmileIcon className="size-4" />
                       </button>
                       <button
                         type="button"
@@ -1043,7 +1060,7 @@ export default function ChatWindow({
                         aria-label="Reply"
                         title="Reply"
                       >
-                        <ReplyIcon className="size-4.5" />
+                        <ReplyIcon className="size-4" />
                       </button>
                       {/* Only while it's recent enough to delete. */}
                       {canDelete && (
@@ -1062,7 +1079,7 @@ export default function ChatWindow({
                           aria-label="Delete"
                           title="Delete"
                         >
-                          <TrashIcon className="size-4.5" />
+                          <TrashIcon className="size-4" />
                         </button>
                       )}
                     </div>
@@ -1073,14 +1090,12 @@ export default function ChatWindow({
                       <div
                         data-reaction-bar
                         className={cx(
-                          "reaction-bar liquid-glass glass-thick absolute z-10 flex w-max max-w-[calc(100vw-1.75rem)] animate-pop flex-wrap items-center gap-0.5 rounded-[24px] p-1",
+                          "absolute z-10 flex w-max max-w-[calc(100vw-1.75rem)] animate-pop flex-wrap items-center gap-0.5 rounded-[20px] border border-line bg-panel p-1 shadow-pop",
                           reactingBelow
-                            ? "top-full mt-0.5"
-                            : "bottom-full mb-0.5",
-                          // Lined up with the bubble; on phones with the avatar, for more room.
-                          mine
-                            ? "right-9 max-md:right-0"
-                            : "left-9 max-md:left-0",
+                            ? "top-full mt-1"
+                            : "bottom-full mb-1",
+                          // Lined up with the bubble (theirs starts after the avatar).
+                          mine ? "right-0" : "left-9 max-md:left-0",
                         )}
                       >
                         {QUICK_REACTIONS.map((emoji) => (
@@ -1089,7 +1104,7 @@ export default function ChatWindow({
                             type="button"
                             className={cx(
                               barButton,
-                              "text-lg hover:scale-125",
+                              "text-lg transition-transform hover:scale-115",
                               m.reactions.some(
                                 (r) => r.userId === me.id && r.emoji === emoji,
                               ) && "bg-accent-soft",
@@ -1159,20 +1174,16 @@ export default function ChatWindow({
         })}
 
         {typing && (
-          <div className="mt-3 flex items-center gap-2 self-start">
-            <Avatar
-              name={nameOf(user)}
-              src={user.avatarUrl}
-              size={MESSAGE_AVATAR}
-            />
+          <div className="mt-2.5 flex items-end gap-2 self-start">
+            <MessageAvatar user={user} show />
             <div
-              className="message-bubble flex animate-pop gap-1 rounded-[20px] rounded-bl-md px-4 py-3.5"
+              className="bubble bubble-theirs bubble-tail flex animate-pop gap-1 px-3.5 py-3"
               aria-label={`${nameOf(user)} is typing`}
             >
               {["0s", "0.15s", "0.3s"].map((delay) => (
                 <span
                   key={delay}
-                  className="size-1.75 animate-blink rounded-full bg-muted"
+                  className="size-2 animate-blink rounded-full bg-muted"
                   style={{ animationDelay: delay }}
                 />
               ))}
@@ -1182,11 +1193,15 @@ export default function ChatWindow({
       </div>
 
       {/* The picker sits outside the <form>, so Enter in its search box doesn't send the message. */}
-      <div ref={composerRef} className="composer-dock">
+      <div
+        ref={composerRef}
+        className="scroll-edge relative z-10 flex-none bg-chat"
+        data-edge={underBottom ? "bottom" : undefined}
+      >
         {showJump && (
           <button
             type="button"
-            className="liquid-glass glass-thick absolute right-6 bottom-full z-10 mb-3 flex min-h-11 animate-pop items-center gap-2 rounded-full px-4 text-xs font-semibold text-fg"
+            className="chat-column-right absolute bottom-full z-10 mb-3 grid size-9 animate-pop place-items-center rounded-full border border-line bg-panel text-muted shadow-pop hover:text-fg"
             onClick={() => {
               listRef.current?.scrollTo({
                 top: listRef.current.scrollHeight,
@@ -1195,59 +1210,53 @@ export default function ChatWindow({
                   : "smooth",
               });
             }}
+            aria-label="Jump to latest messages"
+            title="Latest messages"
           >
-            <ArrowDown className="size-4" /> Latest messages
+            <ArrowDown className="size-4.5" />
           </button>
         )}
         {emojiOpen && (
-          <div className="absolute bottom-full left-3 z-10 mb-2 w-[min(350px,calc(100%-1.5rem))] animate-pop">
-            <div className="liquid-glass glass-thick relative overflow-hidden rounded-[24px]">
-              <Suspense
-                fallback={
-                  <div className="grid h-95 place-items-center text-muted">
-                    Loading…
-                  </div>
-                }
-              >
-                <EmojiPicker onPick={handleEmojiPick} />
-              </Suspense>
-            </div>
+          <div className="chat-column-left absolute bottom-full z-10 mb-2 w-[min(350px,calc(100%-1.5rem))] animate-pop overflow-hidden rounded-xl border border-line bg-panel shadow-pop">
+            <Suspense
+              fallback={
+                <div className="grid h-95 place-items-center text-sm text-muted">
+                  Loading…
+                </div>
+              }
+            >
+              <EmojiPicker onPick={handleEmojiPick} />
+            </Suspense>
           </div>
         )}
         <form
-          className="composer flex flex-wrap items-end gap-2"
+          className="chat-column flex flex-wrap items-end gap-1.5 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]"
           onSubmit={handleSubmit}
         >
           {error && (
-            <p
-              className={cx(
-                ui.error,
-                "liquid-glass glass-thick relative basis-full rounded-2xl px-3.5 py-2",
-              )}
-              role="alert"
-            >
+            <p className={cx(ui.error, "basis-full px-1")} role="alert">
               {error}
             </p>
           )}
           {replyingTo && (
-            <div className="liquid-glass glass-thick relative flex basis-full animate-pop items-center gap-3 rounded-[22px] py-1.5 pr-1.5 pl-3 text-sm">
+            <div className="flex basis-full animate-pop items-center gap-3 rounded-xl bg-panel-2 py-1.5 pr-1 pl-3 text-sm">
               <span className="h-8 w-[3px] flex-none rounded-full bg-accent" />
               <div className="min-w-0 flex-1">
-                <div className="font-semibold text-accent">
+                <div className="font-medium">
                   Replying to{" "}
                   {replyingTo.senderId === me.id ? "yourself" : nameOf(user)}
                 </div>
                 <div className="truncate text-muted">
-                  {replyingTo.image ? "📷 Photo" : replyingTo.body}
+                  {replyingTo.image ? "Photo" : replyingTo.body}
                 </div>
               </div>
               <button
                 type="button"
-                className={cx(ui.iconBtn, "size-11")}
+                className={cx(ui.iconBtn, "size-8")}
                 onClick={() => updateReply(null)}
                 aria-label="Cancel reply"
               >
-                <X className="size-4.5" />
+                <X className="size-4" />
               </button>
             </div>
           )}
@@ -1257,7 +1266,7 @@ export default function ChatWindow({
                 <img
                   src={attachment.previewUrl}
                   alt="Image to send"
-                  className="image-bubble block h-20 max-w-40 animate-pop rounded-2xl object-cover"
+                  className="block h-20 max-w-40 animate-pop rounded-xl object-cover"
                 />
                 {sendingImage ? (
                   <span className="absolute inset-0 grid place-items-center rounded-xl bg-black/50 text-xs font-semibold text-white">
@@ -1266,7 +1275,7 @@ export default function ChatWindow({
                 ) : (
                   <button
                     type="button"
-                    className="glass-control absolute -top-2 -right-2 grid size-6 place-items-center leading-none text-muted hover:text-fg"
+                    className="absolute -top-2 -right-2 grid size-6 place-items-center rounded-full border border-line bg-panel text-muted hover:text-fg"
                     onClick={() => setAttachment(null)}
                     aria-label="Remove image"
                   >
@@ -1284,25 +1293,39 @@ export default function ChatWindow({
             onChange={handleFile}
             aria-label="Choose an image to send"
           />
-          {/* The text box and its two buttons share one rounded field. */}
-          <div className="composer-field liquid-glass glass-thick relative flex min-w-0 basis-full items-end gap-1">
-            <button
-              type="button"
-              className={cx(composerButton, "text-muted")}
-              onClick={() => fileRef.current?.click()}
-              disabled={sendingImage}
-              aria-label="Attach an image"
-              title="Attach an image"
-            >
-              <ImageIcon className="size-5.5" strokeWidth={1.9} />
-            </button>
+          <button
+            type="button"
+            className={composerButton}
+            onClick={() => fileRef.current?.click()}
+            disabled={sendingImage}
+            aria-label="Attach an image"
+            title="Attach an image"
+          >
+            <ImageIcon className="size-5" />
+          </button>
+          {/* The text box, with the emoji and send buttons inside its rounded field. */}
+          <div className="composer-field flex min-w-0 flex-1 items-end">
+            <textarea
+              ref={inputRef}
+              rows={1}
+              value={draft}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              onBlur={stopTyping}
+              placeholder="Message"
+              maxLength={MAX_MESSAGE_LENGTH}
+              aria-label={`Message ${nameOf(user)}`}
+              className="field-sizing-content max-h-40 min-h-9 min-w-0 flex-1 resize-none bg-transparent py-[7px] pl-3.5 text-[15px] leading-[1.4] outline-none placeholder:text-muted"
+            />
             <button
               type="button"
               className={cx(
-                composerButton,
+                "grid size-8 flex-none place-items-center rounded-full transition-colors",
+                canSend ? "mb-0.5" : "mr-0.5 mb-0.5",
                 emojiTarget === "draft"
-                  ? "bg-accent-soft text-accent"
-                  : "text-muted",
+                  ? "text-accent"
+                  : "text-muted hover:text-fg",
               )}
               onClick={() =>
                 setEmojiTarget((target) =>
@@ -1313,46 +1336,28 @@ export default function ChatWindow({
               aria-expanded={emojiTarget === "draft"}
               title="Emoji"
             >
-              <SmileIcon className="size-5.5" strokeWidth={1.9} />
+              <SmileIcon className="size-5" />
             </button>
-            <textarea
-              ref={inputRef}
-              rows={1}
-              value={draft}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              onBlur={stopTyping}
-              placeholder="Write a message…"
-              maxLength={MAX_MESSAGE_LENGTH}
-              aria-label={`Message ${nameOf(user)}`}
-              className="field-sizing-content max-h-40 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] outline-none placeholder:text-muted"
-            />
-            <button
-              className={cx(
-                ui.primaryBase,
-                "send-button grid size-11 flex-none place-items-center",
-              )}
-              type="submit"
-              disabled={(!draft.trim() && !attachment) || sendingImage}
-              aria-label="Send"
-              title="Send"
-            >
-              <Send className="size-5 -translate-x-px translate-y-px" />
-            </button>
+            {/* Like Messages, the send button only shows when there's something to send. */}
+            {canSend && (
+              <button
+                className={cx(
+                  ui.primaryBase,
+                  "mr-1 mb-1 grid size-7 flex-none animate-pop place-items-center rounded-full",
+                )}
+                type="submit"
+                aria-label="Send"
+                title="Send"
+              >
+                <ArrowUp className="size-4.5" strokeWidth={2.5} />
+              </button>
+            )}
           </div>
-          <div className="flex basis-full items-center justify-between px-1 text-[11px] text-muted max-md:hidden">
-            <span>
-              <span className="font-medium">Enter</span> to send{" "}
-              <span className="mx-1.5 opacity-40">·</span> Shift + Enter for a
-              new line
-            </span>
-            <span>
-              {draft.length > 1600
-                ? `${draft.length} / ${MAX_MESSAGE_LENGTH}`
-                : "Make it a conversation."}
-            </span>
-          </div>
+          {draft.length > 1600 && (
+            <p className="basis-full px-1 text-right text-[11px] text-muted">
+              {draft.length} / {MAX_MESSAGE_LENGTH}
+            </p>
+          )}
         </form>
       </div>
       {deletingMessage && (

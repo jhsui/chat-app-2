@@ -1,194 +1,112 @@
 @import "tailwindcss";
-@import "@fontsource-variable/figtree/wght.css";
-@import "@fontsource-variable/figtree/wght-italic.css";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-/* Set per element by glass.ts as the pointer moves. Not inherited, so moving
-   the light only restyles the glass surfaces, never the content inside them. */
-@property --light-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 315deg;
-}
-@property --mx {
-  syntax: "<length-percentage>";
-  inherits: false;
-  initial-value: 50%;
-}
-@property --my {
-  syntax: "<length-percentage>";
-  inherits: false;
-  initial-value: 0%;
-}
-/* How strongly the specular highlight shows (0–1); fades in on hover. */
-@property --spec {
-  syntax: "<number>";
-  inherits: false;
-  initial-value: 0;
-}
-
+/* Warm neutrals and one accent, a deep teal. In the spirit of Apple's
+   Messages: their bubbles are grey, yours are the accent colour. */
 :root {
-  --app-bg: #e8eef8;
-  --panel: #ffffff;
-  /* Translucent on purpose: hover and selection fills sit on glass. */
-  --panel-2: rgb(24 44 92 / 0.06);
-  --chat: #f8fafd;
-  --line: rgb(30 50 95 / 0.1);
-  --fg: #172036;
-  --muted: #5f6d85;
-  --accent: #2f5ae3;
-  --accent-2: #5578ef;
-  --accent-hover: #214bc8;
-  --accent-soft: rgb(66 110 245 / 0.13);
-  --fill-hi: #5e8bff;
-  --fill: #3866ed;
-  --fill-2: #2448c6;
-  --bubble: #ffffff;
-  --danger: #c73550;
-  --online: #168565;
-  --sidebar: #fcfdff;
-
-  /* The colour field the glass floats over. */
-  --ambient: #8db4ff;
-  --ambient-pink: #f2bfe6;
-  --ambient-mint: #9ee2d4;
-  --ambient-sun: #ffd6aa;
-  --ambient-violet: #c2b3ff;
-
-  /* Liquid glass */
-  --glass: rgb(255 255 255 / 0.42);
-  --glass-strong: rgb(255 255 255 / 0.76);
-  --glass-pane: rgb(255 255 255 / 0.46);
-  --glass-edge: rgb(255 255 255 / 0.7);
-  --glass-highlight: rgb(255 255 255 / 0.85);
-  --glass-blur: blur(26px) saturate(190%);
-  --rim-hi: rgb(255 255 255 / 1);
-  --rim-mid: rgb(255 255 255 / 0.55);
-  --rim-lo: rgb(255 255 255 / 0.14);
-  --glass-depth:
-    inset 0 1px 0 rgb(255 255 255 / 0.75),
-    inset 0 -1px 1px rgb(255 255 255 / 0.3),
-    inset 0 0 26px -6px rgb(255 255 255 / 0.6);
-  --glass-shadow:
-    0 12px 34px -10px rgb(28 48 100 / 0.22), 0 2px 6px rgb(28 48 100 / 0.05);
-  --spec-rgb: 255 255 255;
-  --spec-max: 0.45;
-  --edge-tint: rgb(236 242 251 / 0.55);
-
-  /* Damped springs (stiffness 260 / damping 18, and 200 / 24), sampled. */
-  --ease-spring: linear(
-    0, 0.042, 0.149, 0.293, 0.452, 0.608, 0.751, 0.871, 0.967, 1.037, 1.084,
-    1.111, 1.121, 1.118, 1.106, 1.09, 1.071, 1.052, 1.034, 1.019, 1.006, 0.997,
-    0.991, 0.987, 0.986, 0.986, 0.987, 0.989, 0.991, 0.993, 0.995, 0.997, 0.999,
-    1, 1.001, 1.001, 1.002, 1.002, 1.002, 1.001, 1
-  );
-  --ease-spring-soft: linear(
-    0, 0.028, 0.097, 0.189, 0.291, 0.395, 0.493, 0.584, 0.665, 0.734, 0.794,
-    0.843, 0.883, 0.915, 0.941, 0.96, 0.975, 0.986, 0.994, 0.999, 1.003, 1.005,
-    1.006, 1.006, 1.006, 1.006, 1.005, 1.005, 1.004, 1.003, 1.003, 1.002, 1
-  );
+  --app-bg: #f3f2ef; /* the sidebar, and behind everything */
+  --sidebar: #f3f2ef;
+  --chat: #fbfbf9;
+  --panel: #ffffff; /* menus, dialogs, cards */
+  --panel-2: rgb(40 30 10 / 0.05); /* hover and quiet fills */
+  --segment: #ffffff; /* the selected tab in a segmented control */
+  --field: #ffffff; /* text inputs */
+  --line: rgb(40 30 10 / 0.1);
+  --fg: #1c1b19;
+  --muted: #6d6a64;
+  --accent: #0b6b61; /* links, icons, focus rings */
+  --accent-soft: rgb(13 122 111 / 0.12);
+  --fill: #0d7a6f; /* your bubbles and primary buttons, under white text */
+  --fill-hover: #0b6b61;
+  --bubble: #ebe9e5; /* their bubbles */
+  --danger: #c42b1c;
+  --danger-fill: #c42b1c;
+  --online: #34c759;
+  --pop-shadow: 0 10px 30px rgb(30 20 0 / 0.12), 0 1px 3px rgb(30 20 0 / 0.08);
+  --edge-shadow: rgb(30 20 0 / 0.3);
   color-scheme: light;
 }
 :root[data-theme="dark"] {
-  --app-bg: #060a13;
-  --panel: #141d2e;
+  --app-bg: #1a1a19;
+  --sidebar: #1a1a19;
+  --chat: #121211;
+  --panel: #252523;
   --panel-2: rgb(255 255 255 / 0.07);
-  --chat: #0e1726;
-  --line: rgb(200 220 255 / 0.1);
-  --fg: #eef3fc;
-  --muted: #9aa9c1;
-  --accent: #93b2ff;
-  --accent-2: #a2c4ff;
-  --accent-hover: #bad0ff;
-  --accent-soft: rgb(120 160 255 / 0.17);
-  --fill-hi: #5c86ff;
-  --fill: #3866ed;
-  --fill-2: #2340b8;
-  --bubble: #1b283d;
-  --danger: #ff8da3;
-  --online: #52d5ac;
-  --sidebar: #111a2a;
-
-  --ambient: #2348a0;
-  --ambient-pink: #6a2a78;
-  --ambient-mint: #0d5862;
-  --ambient-sun: #6a3f16;
-  --ambient-violet: #3b2a8c;
-
-  --glass: rgb(32 44 70 / 0.4);
-  --glass-strong: rgb(30 41 64 / 0.8);
-  --glass-pane: rgb(14 21 36 / 0.55);
-  --glass-edge: rgb(190 215 255 / 0.16);
-  --glass-highlight: rgb(215 232 255 / 0.16);
-  --glass-blur: blur(28px) saturate(170%);
-  --rim-hi: rgb(225 236 255 / 0.6);
-  --rim-mid: rgb(200 220 255 / 0.22);
-  --rim-lo: rgb(200 220 255 / 0.05);
-  --glass-depth:
-    inset 0 1px 0 rgb(255 255 255 / 0.12),
-    inset 0 -1px 1px rgb(255 255 255 / 0.04),
-    inset 0 0 26px -8px rgb(150 185 255 / 0.2);
-  --glass-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.55);
-  --spec-rgb: 190 212 255;
-  --spec-max: 0.15;
-  --edge-tint: rgb(8 13 24 / 0.5);
+  --segment: rgb(255 255 255 / 0.16);
+  --field: rgb(255 255 255 / 0.06);
+  --line: rgb(255 255 255 / 0.09);
+  --fg: #f1f0ec;
+  --muted: #9d9a93;
+  --accent: #5cc8b8;
+  --accent-soft: rgb(92 200 184 / 0.16);
+  --fill: #0d7a6f;
+  --fill-hover: #0b6b61;
+  --bubble: #2a2a27;
+  --danger: #ff6961;
+  --danger-fill: #c42b1c;
+  --online: #30d158;
+  --pop-shadow: 0 10px 30px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --edge-shadow: rgb(0 0 0 / 0.6);
   color-scheme: dark;
 }
 @theme inline {
   --color-app: var(--app-bg);
+  --color-sidebar: var(--sidebar);
+  --color-chat: var(--chat);
   --color-panel: var(--panel);
   --color-panel-2: var(--panel-2);
-  --color-chat: var(--chat);
+  --color-field: var(--field);
   --color-line: var(--line);
   --color-fg: var(--fg);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
-  --color-accent-2: var(--accent-2);
-  --color-fill: var(--fill);
-  --color-fill-2: var(--fill-2);
-  --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
+  --color-fill: var(--fill);
+  --color-fill-hover: var(--fill-hover);
   --color-bubble: var(--bubble);
   --color-danger: var(--danger);
+  --color-danger-fill: var(--danger-fill);
   --color-online: var(--online);
-  --color-glass: var(--glass);
-  --color-glass-strong: var(--glass-strong);
+  --shadow-pop: var(--pop-shadow);
 }
 @theme {
   --font-sans:
-    "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    sans-serif;
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto,
+    "Helvetica Neue", Arial, sans-serif;
   --breakpoint-md: 45rem;
-  --shadow-bubble: 0 2px 6px rgb(10 25 60 / 0.04);
-  --shadow-card: 0 28px 90px -30px rgb(0 12 40 / 0.3);
-  --shadow-pop:
-    0 18px 50px -12px rgb(0 8 30 / 0.35), 0 0 0 1px rgb(100 140 200 / 0.05);
-  --animate-pop: pop 620ms var(--ease-spring);
+  --animate-pop: pop 160ms ease-out;
   --animate-blink: blink 1.4s infinite ease-in-out;
-  @keyframes pop {
-    from {
-      opacity: 0;
-      transform: translateY(10px) scale(0.94);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-  @keyframes blink {
-    0%,
-    80%,
-    100% {
-      opacity: 0.35;
-      transform: translateY(0) scale(0.9);
-    }
-    40% {
-      opacity: 1;
-      transform: translateY(-3px) scale(1.1);
-    }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
   }
 }
+@keyframes blink {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
 @layer base {
   html {
     font-size: 16px;
@@ -205,36 +123,9 @@
     color: var(--fg);
     -webkit-font-smoothing: antialiased;
   }
-  /* The living colour field behind everything: soft blobs drifting slowly, so
-     the glass always has light and colour to bend. Transform-only animation,
-     so it stays on the compositor. It still makes every blurred surface
-     redraw, so it only runs while the page is in use (see glass.ts). */
-  body::before,
-  body::after {
-    content: "";
-    position: fixed;
-    z-index: -1;
-    inset: -30%;
-    pointer-events: none;
-    will-change: transform;
-  }
-  body::before {
-    background:
-      radial-gradient(circle at 28% 30%, var(--ambient) 0, transparent 22%),
-      radial-gradient(circle at 74% 26%, var(--ambient-pink) 0, transparent 20%),
-      radial-gradient(circle at 58% 74%, var(--ambient-mint) 0, transparent 24%);
-    animation: drift-a 70s ease-in-out infinite alternate;
-  }
-  body::after {
-    background:
-      radial-gradient(circle at 70% 64%, var(--ambient-violet) 0, transparent 18%),
-      radial-gradient(circle at 34% 70%, var(--ambient-sun) 0, transparent 16%);
-    opacity: 0.85;
-    animation: drift-b 95s ease-in-out infinite alternate;
-  }
   * {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--muted) 25%, transparent)
+    scrollbar-color: color-mix(in srgb, var(--muted) 30%, transparent)
       transparent;
   }
   button:not(:disabled),
@@ -251,798 +142,232 @@
   a:focus-visible,
   [tabindex]:focus-visible {
     outline: 2px solid var(--accent);
-    outline-offset: 4px;
+    outline-offset: 2px;
   }
   ::selection {
     background: color-mix(in srgb, var(--accent) 28%, transparent);
   }
 }
+
 @layer components {
-  .app-stage {
-    height: 100dvh;
-    padding: 16px;
-  }
-  /* Two floating panes over the colour field, not one card. */
+  /* Sidebar and chat side by side; one at a time on phones. */
   .app-shell {
     display: grid;
-    grid-template-columns: 336px minmax(0, 1fr);
-    gap: 14px;
-    height: 100%;
-    max-width: 1560px;
-    margin: auto;
-  }
-  .glass-pane {
-    position: relative;
-    overflow: hidden;
-    border-radius: 32px;
-  }
-  .brand-mark {
-    position: relative;
-    display: grid;
-    width: 36px;
-    height: 36px;
-    flex: none;
-    place-items: center;
-    border-radius: 12px;
-    color: white;
-  }
-  .eyebrow {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--muted);
+    grid-template-columns: 320px minmax(0, 1fr);
+    height: 100dvh;
   }
   .conversation-row {
-    position: relative;
     display: flex;
     width: 100%;
     align-items: center;
-    gap: 12px;
-    padding: 13px 12px;
-    border-radius: 20px;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 10px;
     text-align: left;
-    transition:
-      background 220ms,
-      box-shadow 220ms,
-      scale 600ms var(--ease-spring);
   }
   .conversation-row:hover {
     background: var(--panel-2);
   }
-  .conversation-row:active {
-    scale: 0.975;
-    transition-duration: 220ms, 220ms, 120ms;
-  }
-  /* The open chat sits under a lens of thicker glass. */
-  .conversation-row[data-active="true"] {
-    background:
-      linear-gradient(
-        120deg,
-        color-mix(in srgb, var(--accent) 16%, transparent),
-        transparent 70%
-      ),
-      var(--glass-strong);
-    box-shadow:
-      var(--glass-depth),
-      inset 0 0 0 1px var(--glass-edge),
-      0 8px 22px -10px rgb(30 60 130 / 0.3);
-  }
-  .tab-panel {
-    animation: panel-in 520ms var(--ease-spring-soft);
-  }
-  /* A row on its way up the list (motion.ts) travels on a card above the
-     rows it passes. Solid, not glass: their text would show through. */
+  /* A row on its way up the list (motion.ts) passes over the others, so it
+     gets a solid background while it travels. */
   [data-gliding="up"] {
     position: relative;
     z-index: 1;
   }
-  [data-gliding="up"] > .conversation-row {
-    /* Solid at once (the row's usual background fade only on landing). */
-    transition-property: scale;
-    background: var(--panel);
+  [data-gliding="up"] > .conversation-row:not([data-active="true"]) {
+    background: var(--sidebar);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.12);
+  }
+
+  .segmented {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 9px;
+    background: var(--panel-2);
+  }
+  .segmented [role="tab"] {
+    flex: 1;
+    min-height: 28px;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    transition: background 150ms, color 150ms;
+  }
+  .segmented [role="tab"][aria-selected="true"] {
+    background: var(--segment);
+    color: var(--fg);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+  }
+
+  /* The conversation and the message box share one centred column, so
+     on a wide screen the two sides of the chat don't drift apart. */
+  .chat-column {
+    padding-inline: max(16px, calc((100% - 760px) / 2));
+  }
+  .chat-column-left {
+    left: max(16px, calc((100% - 760px) / 2));
+  }
+  .chat-column-right {
+    right: max(16px, calc((100% - 760px) / 2));
+  }
+  /* The header and the message box get a hairline and a soft shadow only
+     while messages are scrolled underneath them. */
+  .scroll-edge {
+    transition: box-shadow 200ms;
+  }
+  .scroll-edge[data-edge="top"] {
     box-shadow:
-      var(--glass-depth),
-      inset 0 0 0 1px var(--glass-edge),
-      0 12px 28px -10px rgb(30 60 130 / 0.35);
+      0 1px 0 var(--line),
+      0 8px 18px -14px var(--edge-shadow);
   }
-  .chat-conversation {
-    container-type: inline-size;
+  .scroll-edge[data-edge="bottom"] {
+    box-shadow:
+      0 -1px 0 var(--line),
+      0 -8px 18px -14px var(--edge-shadow);
   }
-  /* The header and the message box float over the list, which scrolls
-     underneath them. The list's padding comes from their measured heights. */
-  .chat-top,
-  .composer-dock {
-    position: absolute;
-    z-index: 20;
-    inset-inline: 0;
-    isolation: isolate;
-    pointer-events: none;
+  /* The sign-in page's side panel: a tint of the accent, and a lighter
+     grey for the bubbles of the sample conversation drawn on it. */
+  .auth-panel {
+    --bubble: #ffffff;
+    background: color-mix(in srgb, var(--fill) 9%, var(--app-bg));
   }
-  .chat-top {
-    top: 0;
-    padding: 12px 12px 0;
-  }
-  .composer-dock {
-    bottom: 0;
-  }
-  .chat-top > *,
-  .composer-dock > :not(.composer),
-  .composer > * {
-    pointer-events: auto;
-  }
-  /* Scroll-edge effect: messages soften and blur as they pass under a bar. */
-  .chat-top::before,
-  .composer-dock::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    pointer-events: none;
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
-  }
-  .chat-top::before {
-    inset: 0 0 -28px;
-    background: linear-gradient(var(--edge-tint), transparent);
-    -webkit-mask-image: linear-gradient(black 50%, transparent);
-    mask-image: linear-gradient(black 50%, transparent);
-  }
-  .composer-dock::before {
-    inset: -36px 0 0;
-    background: linear-gradient(transparent, var(--edge-tint));
-    -webkit-mask-image: linear-gradient(transparent, black 45%);
-    mask-image: linear-gradient(transparent, black 45%);
-  }
-  .chat-header {
-    border-radius: 26px;
-  }
-  .message-list {
-    background: transparent;
-    padding: calc(var(--top-h, 96px) + 10px) clamp(16px, 3.2vw, 52px)
-      calc(var(--composer-h, 112px) + 6px);
-    scroll-padding-block: var(--top-h, 96px) var(--composer-h, 112px);
-    overscroll-behavior: contain;
+  [data-theme="dark"] .auth-panel {
+    --bubble: #3a3a36;
+    background: color-mix(in srgb, var(--fill) 16%, var(--app-bg));
   }
   .message-entry {
-    animation: message-in 640ms var(--ease-spring);
-    transform-origin: 0% 100%;
+    animation: message-in 200ms ease-out;
   }
-  .message-entry[data-mine="true"] {
-    transform-origin: 100% 100%;
+  .bubble {
+    position: relative;
+    border-radius: 18px;
+    padding: 6px 12px;
+    font-size: 15px;
+    line-height: 1.4;
   }
-  .composer {
-    padding: 14px clamp(16px, 3.2vw, 52px)
-      max(12px, env(safe-area-inset-bottom));
+  .bubble-mine {
+    background: var(--fill);
+    color: white;
+  }
+  .bubble-theirs {
+    background: var(--bubble);
+    color: var(--fg);
+  }
+  /* The tail on the last bubble of a run: a curl in the bubble's own colour,
+     cut out with a mask, so it works over any background. */
+  .bubble-tail::before {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    width: 20px;
+    height: 25px;
+    background: inherit;
+    --tail: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 25' preserveAspectRatio='none'%3E%3Cpath d='M0 0V11A16 14 0 0 0 16 25H20V24.54A10 10 0 0 1 13 15V0Z'/%3E%3C/svg%3E");
+    -webkit-mask: var(--tail) no-repeat 0 0 / 100% 100%;
+    mask: var(--tail) no-repeat 0 0 / 100% 100%;
+  }
+  .bubble-mine.bubble-tail::before {
+    right: -7px;
+  }
+  .bubble-theirs.bubble-tail::before {
+    left: -7px;
+    transform: scaleX(-1);
+  }
+  /* A reaction, pinned to the top corner of the bubble it's on. The ring in
+     the chat's colour separates it from the bubble underneath. */
+  .tapback {
+    display: flex;
+    height: 24px;
+    align-items: center;
+    gap: 2px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--bubble);
+    box-shadow: 0 0 0 2px var(--chat);
+    font-size: 13px;
+  }
+  .tapback[aria-pressed="true"] {
+    background: var(--fill);
+    color: white;
   }
   .composer-field {
-    border-radius: 28px;
-    padding: 7px;
-    transition:
-      --spec 450ms,
-      box-shadow 260ms,
-      translate 600ms var(--ease-spring);
+    border: 1px solid var(--line);
+    border-radius: 19px;
+    background: var(--chat);
+    transition: border-color 150ms;
   }
+  .composer-field:focus-within {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  }
+
   .floating-menu {
     position: fixed;
     z-index: 80;
-    padding: 8px;
+    padding: 5px;
     overflow-y: auto;
     overscroll-behavior: contain;
-    border-radius: 26px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    box-shadow: var(--pop-shadow);
     color: var(--fg);
-    animation: menu-in 560ms var(--ease-spring);
+    animation: pop 140ms ease-out;
   }
   .floating-menu button:focus-visible {
-    outline-offset: -3px;
+    outline-offset: -2px;
   }
   .menu-action {
     display: flex;
     width: 100%;
-    min-height: 44px;
+    min-height: 34px;
     align-items: center;
-    gap: 12px;
-    border-radius: 14px;
-    padding: 10px 12px;
+    gap: 10px;
+    border-radius: 7px;
+    padding: 6px 10px;
     text-align: left;
     font-size: 13px;
-    font-weight: 500;
-    transition: background 150ms;
   }
   .menu-action:hover {
     background: var(--panel-2);
   }
-  .link-card {
-    transition:
-      box-shadow 220ms,
-      translate 600ms var(--ease-spring),
-      scale 600ms var(--ease-spring);
+  .dialog {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+    box-shadow: var(--pop-shadow);
+    color: var(--fg);
   }
-  .link-card:hover {
-    translate: 0 -3px;
-    box-shadow:
-      var(--glass-depth),
-      0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
-      var(--glass-shadow);
-  }
-  .link-card:active {
-    scale: 0.97;
-  }
-  .image-bubble {
-    box-shadow:
-      inset 0 0 0 1px var(--glass-edge),
-      0 8px 22px -10px rgb(10 25 60 / 0.35);
-    transition: scale 600ms var(--ease-spring);
-  }
-  .image-bubble:hover {
-    scale: 1.02;
-  }
-  .image-bubble:active {
-    scale: 0.97;
-  }
-  .reaction-chip {
-    animation: chip-in 520ms var(--ease-spring);
-    transition:
-      scale 520ms var(--ease-spring),
-      background 200ms;
-  }
-  .reaction-chip:hover {
-    scale: 1.1;
-  }
-  .reaction-chip:active {
-    scale: 0.9;
-  }
-  .unread-badge {
-    animation: chip-in 520ms var(--ease-spring);
-  }
-  .reaction-bar > button {
-    animation: chip-in 480ms var(--ease-spring) backwards;
-    transition: scale 480ms var(--ease-spring);
-  }
-  .reaction-bar > button:nth-child(2) { animation-delay: 25ms; }
-  .reaction-bar > button:nth-child(3) { animation-delay: 50ms; }
-  .reaction-bar > button:nth-child(4) { animation-delay: 75ms; }
-  .reaction-bar > button:nth-child(5) { animation-delay: 100ms; }
-  .reaction-bar > button:nth-child(6) { animation-delay: 125ms; }
-  .reaction-bar > button:nth-child(7) { animation-delay: 150ms; }
-  .reaction-bar > button:nth-child(n + 8) { animation-delay: 170ms; }
-  .reaction-bar > button:active {
-    scale: 0.85;
-  }
-  .empty-orbit {
-    position: relative;
-    display: grid;
-    place-items: center;
-    width: 240px;
-    height: 240px;
-    margin: 0 auto 24px;
-    border-radius: 50%;
-    background: radial-gradient(
-      circle,
-      color-mix(in srgb, var(--accent) 16%, transparent),
-      transparent 68%
-    );
-    box-shadow: inset 0 0 0 1px var(--glass-edge);
-  }
-  .empty-orbit::before {
-    content: "";
-    position: absolute;
-    inset: 28px;
-    border: 1px dashed color-mix(in srgb, var(--accent) 35%, transparent);
-    border-radius: 50%;
-    animation: spin 48s linear infinite;
-  }
-  .empty-orbit-core {
-    animation: breathe 5s ease-in-out infinite;
-  }
-  .orbit-note {
-    position: absolute;
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 12px 17px;
-    border-radius: 20px;
-    animation: float 6s ease-in-out infinite;
-  }
-  .orbit-note:first-of-type {
-    left: -20px;
-    top: 30px;
-    transform: rotate(-8deg);
-  }
-  .orbit-note:last-of-type {
-    right: -25px;
-    bottom: 32px;
-    animation-delay: -3s;
-  }
-  .auth-layout {
-    display: grid;
-    min-height: 100dvh;
-    grid-template-columns: 1.1fr 1fr;
-    max-width: 1600px;
-    margin: auto;
-    padding: 28px;
-    gap: 28px;
-  }
-  .auth-story {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    padding: clamp(30px, 4vw, 56px);
-    border: 1px solid rgb(255 255 255 / 0.14);
-    border-radius: 32px;
-    background: linear-gradient(
-      145deg,
-      rgb(22 42 84 / 0.82),
-      rgb(20 32 58 / 0.72)
-    );
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    box-shadow:
-      var(--glass-shadow),
-      inset 0 1px 0 rgb(255 255 255 / 0.22),
-      inset 0 0 40px -10px rgb(140 180 255 / 0.25);
-    color: #f0f5ff;
-  }
-  .auth-story::before {
-    content: "";
-    position: absolute;
-    width: 650px;
-    height: 650px;
-    left: 10%;
-    top: 12%;
-    border-radius: 50%;
-    background: radial-gradient(circle, #2c55a8 0%, transparent 67%);
-    opacity: 0.65;
-    animation: drift-a 60s ease-in-out infinite alternate;
-  }
-  .auth-story::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background-image: radial-gradient(#9fb4e1 0.7px, transparent 0.7px);
-    background-size: 28px 28px;
-    opacity: 0.09;
-    pointer-events: none;
-  }
-  .auth-form {
-    animation: pop 700ms var(--ease-spring) backwards;
-  }
-  .auth-preview {
-    position: relative;
-    margin: 32px 0;
-    max-width: 360px;
-  }
-  .auth-preview > div {
-    animation: float 7s ease-in-out infinite;
-  }
-  .auth-preview > div:nth-child(2) {
-    animation-delay: -3s;
-  }
-  .profile-dialog::backdrop {
-    background: rgb(5 12 26 / 0.32);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
-    backdrop-filter: blur(14px) saturate(140%);
-    animation: fade-in 260ms ease-out;
-  }
-  .skeleton {
-    background: linear-gradient(
-      90deg,
-      var(--panel-2) 25%,
-      var(--glass-strong) 50%,
-      var(--panel-2) 75%
-    );
-    background-size: 200% 100%;
-    animation: shimmer 1.6s infinite;
+  .dialog::backdrop {
+    background: rgb(0 0 0 / 0.35);
+    animation: fade-in 150ms ease-out;
   }
 }
 
-@keyframes float {
-  0%,
-  100% {
-    translate: 0 0;
-  }
-  50% {
-    translate: 0 -7px;
-  }
-}
-@keyframes shimmer {
-  to {
-    background-position: -200% 0;
-  }
-}
-@keyframes drift-a {
-  0% {
-    transform: translate3d(0, 0, 0) rotate(0deg);
-  }
-  50% {
-    transform: translate3d(5%, -4%, 0) rotate(10deg) scale(1.06);
-  }
-  100% {
-    transform: translate3d(-4%, 5%, 0) rotate(-8deg) scale(0.96);
-  }
-}
-@keyframes drift-b {
-  0% {
-    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
-  }
-  100% {
-    transform: translate3d(-7%, -5%, 0) rotate(-14deg) scale(1.12);
-  }
-}
-@keyframes message-in {
-  from {
-    opacity: 0;
-    transform: translateY(16px) scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes menu-in {
-  from {
-    opacity: 0;
-    transform: scale(0.4);
-  }
-  40% {
-    opacity: 1;
-  }
-  to {
-    transform: none;
-  }
-}
-@keyframes chip-in {
-  from {
-    opacity: 0;
-    scale: 0.3;
-  }
-  to {
-    opacity: 1;
-    scale: 1;
-  }
-}
-@keyframes panel-in {
-  from {
-    opacity: 0;
-    translate: 0 12px;
-  }
-  to {
-    opacity: 1;
-    translate: 0 0;
-  }
-}
-@keyframes spin {
-  to {
-    rotate: 360deg;
-  }
-}
-@keyframes breathe {
-  0%,
-  100% {
-    scale: 1;
-    box-shadow:
-      inset 0 1px 1px rgb(255 255 255 / 0.55),
-      0 12px 30px -8px color-mix(in srgb, var(--fill) 55%, transparent);
-  }
-  50% {
-    scale: 1.04;
-    box-shadow:
-      inset 0 1px 1px rgb(255 255 255 / 0.55),
-      0 18px 44px -6px color-mix(in srgb, var(--fill) 70%, transparent);
-  }
-}
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-/* The background only drifts while the page is in use (glass.ts sets the
-   attribute). Unlayered, so it beats the animation shorthands above. */
-:root:not([data-ambient="live"]) body::before,
-:root:not([data-ambient="live"]) body::after,
-:root:not([data-ambient="live"]) .auth-story::before {
-  animation-play-state: paused;
-}
-
-/* ---------------------------------------------------------------------------
-   Liquid glass. Unlayered on purpose, so it beats the solid Tailwind surface
-   utilities (bg-panel, border-line…) on the elements that use it.
-
-   One surface = tinted, high-saturation blur of whatever is behind it
-   + a specular hotspot that follows the pointer (background layer)
-   + a rim of light that turns toward the pointer (::before)
-   + inner depth glow and a soft drop shadow (box-shadow).
-   --------------------------------------------------------------------------- */
-.liquid-glass {
-  --tint: var(--glass);
-  --spec-size: 150px;
-  border: 0;
-  background:
-    radial-gradient(
-      circle var(--spec-size) at var(--mx) var(--my),
-      rgb(var(--spec-rgb) / calc(var(--spec) * var(--spec-max))),
-      transparent 70%
-    ),
-    linear-gradient(var(--tint), var(--tint));
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-depth), var(--glass-shadow);
-  transition:
-    --spec 450ms ease,
-    box-shadow 260ms;
-}
-/* .glass-unlit opts a surface out of the highlight (the rim still turns). */
-.liquid-glass:not(.glass-pane, .glass-unlit):hover {
-  --spec: 1;
-}
-/* A 1px ring, brightest on the side facing the light and again opposite it,
-   the way a curved glass edge catches it. */
-.liquid-glass::before {
-  --light-angle: inherit;
-  content: "";
-  position: absolute;
-  z-index: 50;
-  inset: 0;
-  padding: 1px;
-  border-radius: inherit;
-  background: conic-gradient(
-    from var(--light-angle),
-    var(--rim-hi),
-    var(--rim-lo) 22%,
-    var(--rim-lo) 30%,
-    var(--rim-mid) 50%,
-    var(--rim-lo) 70%,
-    var(--rim-lo) 78%,
-    var(--rim-hi)
-  );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box exclude,
-    linear-gradient(#000 0 0);
-  pointer-events: none;
-}
-/* Thicker glass, for things you read or type in. */
-.glass-thick {
-  --tint: var(--glass-strong);
-}
-.glass-pane {
-  --tint: var(--glass-pane);
-}
-
-/* An accent-coloured drop of glass: buttons, my own bubbles. */
-.liquid-accent,
-.message-bubble-own {
-  background:
-    radial-gradient(120% 70% at 50% -10%, rgb(255 255 255 / 0.38), transparent 60%),
-    linear-gradient(160deg, var(--fill-hi), var(--fill) 45%, var(--fill-2));
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.55),
-    inset 0 -2px 6px rgb(8 24 110 / 0.3),
-    inset 0 0 0 1px rgb(255 255 255 / 0.16),
-    0 8px 20px -8px color-mix(in srgb, var(--fill) 70%, transparent);
+/* The selected chat in the sidebar is filled with the accent, so everything
+   in it turns white. Unlayered, so it beats the text colour utilities. */
+.conversation-row[data-active="true"] {
+  --surface: var(--fill);
+  background: var(--fill);
   color: white;
 }
-.liquid-accent {
-  transition:
-    scale 600ms var(--ease-spring),
-    translate 600ms var(--ease-spring),
-    filter 200ms,
-    box-shadow 260ms,
-    opacity 200ms;
-}
-.liquid-accent:hover:enabled {
-  scale: 1.04;
-  filter: brightness(1.07) saturate(1.1);
-}
-.liquid-accent:active:enabled {
-  scale: 0.93;
-  transition-duration: 120ms;
-}
-.brand-mark {
-  background:
-    radial-gradient(120% 70% at 50% -10%, rgb(255 255 255 / 0.45), transparent 60%),
-    linear-gradient(150deg, #6f97ff, #2f58dc);
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.6),
-    inset 0 -2px 5px rgb(8 24 110 / 0.3),
-    0 6px 16px -6px rgb(56 102 237 / 0.6);
+.conversation-row[data-active="true"] :is(.text-muted, .text-accent, .text-danger) {
+  color: rgb(255 255 255 / 0.85);
 }
 
-/* Small round glass buttons (icon buttons). Box-shadow rims only: there are
-   many of these, so they skip the pointer-tracked ring. */
-.glass-control {
-  border: 0;
-  border-radius: 999px;
-  background: var(--glass);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-  backdrop-filter: blur(12px) saturate(180%);
-  box-shadow:
-    var(--glass-depth),
-    inset 0 0 0 1px var(--glass-edge),
-    0 2px 8px rgb(10 25 60 / 0.06);
-  transition:
-    scale 560ms var(--ease-spring),
-    background 200ms,
-    color 200ms;
-}
-.glass-control:hover:enabled {
-  background: var(--glass-strong);
-  scale: 1.07;
-}
-.glass-control:active:enabled {
-  scale: 0.9;
-  transition-duration: 110ms, 200ms, 200ms;
-}
-.glass-input {
-  background: var(--glass);
-  border: 1px solid var(--glass-edge);
-  border-radius: 18px;
-  box-shadow: var(--glass-depth);
-}
-.glass-input:focus {
-  background: var(--glass-strong);
-  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
-  box-shadow:
-    var(--glass-depth),
-    0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
-/* Segmented control with a lens that slides between the tabs. Its two edges
-   move at slightly different times, so it stretches toward where it's going
-   and settles like a drop of liquid. */
-.glass-tabs {
-  position: relative;
-  background: var(--panel-2);
-  border-radius: 999px;
-  box-shadow: inset 0 1px 2px rgb(10 25 60 / 0.08);
-}
-.glass-tabs [role="tab"] {
-  position: relative;
-  z-index: 1;
-  border-radius: 999px;
-}
-.tab-glider {
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  left: 4px;
-  right: calc(50% + 2px);
-  border-radius: 999px;
-  background: var(--glass-strong);
-  box-shadow:
-    var(--glass-depth),
-    inset 0 0 0 1px var(--glass-edge),
-    0 4px 14px -4px rgb(10 25 60 / 0.25);
-  transition:
-    left 560ms var(--ease-spring-soft) 70ms,
-    right 560ms var(--ease-spring-soft);
-}
-.glass-tabs[data-tab="people"] .tab-glider {
-  left: calc(50% + 2px);
-  right: 4px;
-  transition:
-    left 560ms var(--ease-spring-soft),
-    right 560ms var(--ease-spring-soft) 70ms;
-}
-
-.message-bubble {
-  background: var(--glass-strong);
-  box-shadow:
-    var(--glass-depth),
-    inset 0 0 0 1px var(--glass-edge),
-    0 4px 14px -6px rgb(10 25 60 / 0.16);
-}
-.day-pill {
-  position: relative;
-  border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-/* Empty send button is a quiet glass bead; typing inflates it into an accent
-   drop. Outside the layers so it beats .liquid-accent and the utilities. */
-.send-button {
-  border-radius: 50%;
-}
-.send-button:disabled {
-  background: var(--glass-strong);
-  color: var(--muted);
-  box-shadow:
-    var(--glass-depth),
-    inset 0 0 0 1px var(--glass-edge);
-  scale: 0.86;
-  opacity: 0.8;
-}
-.composer-field:focus-within {
-  translate: 0 -1px;
-  box-shadow:
-    var(--glass-depth),
-    0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent),
-    var(--glass-shadow);
-}
-
-@media (max-width: 1100px) {
-  .app-stage {
-    padding: 12px;
-  }
-  .app-shell {
-    grid-template-columns: 296px minmax(0, 1fr);
-    gap: 12px;
-  }
-  .glass-pane {
-    border-radius: 26px;
-  }
-}
 @media (max-width: 719px) {
-  .app-stage {
-    padding: 0;
-  }
   .app-shell {
     grid-template-columns: minmax(0, 1fr);
-    gap: 0;
   }
-  .app-shell .glass-pane {
-    border-radius: 0;
+  .chat-column {
+    padding-inline: 12px;
   }
-  .app-shell .glass-pane::before {
-    display: none;
+  .chat-column-left {
+    left: 12px;
   }
-  .chat-top {
-    padding: 8px 10px 0;
-  }
-  .chat-header {
-    border-radius: 24px;
-  }
-  .message-list {
-    padding-inline: 14px;
-  }
-  .composer {
-    padding: 8px 12px max(10px, env(safe-area-inset-bottom));
-  }
-  .composer-field {
-    border-radius: 24px;
-    padding: 5px;
-  }
-  .auth-layout {
-    display: block;
-    padding: 12px;
-  }
-  .auth-story {
-    display: none;
-  }
-  .auth-card {
-    padding-inline: 20px;
-  }
-}
-
-/* Plain, solid surfaces when blur is unavailable or unwanted. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  :root,
-  :root[data-theme="dark"] {
-    --glass: var(--panel);
-    --glass-strong: var(--panel);
-    --glass-pane: var(--panel);
-  }
-}
-@media (prefers-reduced-transparency: reduce) {
-  :root,
-  :root[data-theme="dark"] {
-    --glass: var(--panel);
-    --glass-strong: var(--panel);
-    --glass-pane: var(--panel);
-    --glass-blur: none;
-  }
-  .profile-dialog::backdrop,
-  .chat-top::before,
-  .composer-dock::before {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
+  .chat-column-right {
+    right: 12px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { MessageCircleMore } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import { io, type Socket } from "socket.io-client";
 import type {
   ClientToServerEvents,
@@ -400,95 +400,75 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
     online[user.id] ?? user.online ?? false;
 
   return (
-    // On wide screens the sidebar and the chat are two glass panes floating
-    // over the page's colour field.
-    <div className="app-stage">
-      <div className="app-shell">
-        <Sidebar
+    // Sidebar and chat side by side on wide screens; one at a time on phones.
+    <div className="app-shell">
+      <Sidebar
+        me={me}
+        conversations={conversations}
+        people={people}
+        drafts={draftsRef.current}
+        onShowPeople={refreshPeople}
+        activeId={active?.id}
+        typing={typing}
+        isOnline={isOnline}
+        connected={connected}
+        onSelect={openConversation}
+        onShowProfile={() => setProfileId(me.id)}
+        onLogout={handleLogout}
+      />
+      {active ? (
+        <ChatWindow
+          key={active.id}
           me={me}
-          conversations={conversations}
-          people={people}
-          drafts={draftsRef.current}
-          onShowPeople={refreshPeople}
-          activeId={active?.id}
-          typing={typing}
-          isOnline={isOnline}
+          user={active}
+          online={isOnline(active)}
           connected={connected}
-          onSelect={openConversation}
-          onShowProfile={() => setProfileId(me.id)}
-          onLogout={handleLogout}
+          typing={Boolean(typing[active.id])}
+          messages={messages}
+          hasMore={hasMore}
+          loading={loading}
+          onLoadOlder={loadOlder}
+          onSend={sendMessage}
+          onSendImage={sendImage}
+          initialDraft={draftsRef.current.get(active.id) ?? ""}
+          onDraftChange={(text) => saveDraft(active.id, text)}
+          initialReplyTo={replyDraftsRef.current.get(active.id) ?? null}
+          onReplyChange={(message) => {
+            if (message) replyDraftsRef.current.set(active.id, message);
+            else replyDraftsRef.current.delete(active.id);
+          }}
+          onReact={reactToMessage}
+          onDelete={deleteMessage}
+          onTyping={sendTyping}
+          onBack={closeConversation}
+          onShowProfile={() => setProfileId(active.id)}
         />
-        {active ? (
-          <ChatWindow
-            key={active.id}
-            me={me}
-            user={active}
-            online={isOnline(active)}
-            connected={connected}
-            typing={Boolean(typing[active.id])}
-            messages={messages}
-            hasMore={hasMore}
-            loading={loading}
-            onLoadOlder={loadOlder}
-            onSend={sendMessage}
-            onSendImage={sendImage}
-            initialDraft={draftsRef.current.get(active.id) ?? ""}
-            onDraftChange={(text) => saveDraft(active.id, text)}
-            initialReplyTo={replyDraftsRef.current.get(active.id) ?? null}
-            onReplyChange={(message) => {
-              if (message) replyDraftsRef.current.set(active.id, message);
-              else replyDraftsRef.current.delete(active.id);
-            }}
-            onReact={reactToMessage}
-            onDelete={deleteMessage}
-            onTyping={sendTyping}
-            onBack={closeConversation}
-            onShowProfile={() => setProfileId(active.id)}
-          />
-        ) : (
-          <section className="liquid-glass glass-pane grid place-items-center p-8 text-center max-md:hidden">
-            <div className="max-w-100 animate-pop">
-              <div className="empty-orbit" aria-hidden="true">
-                <div className="liquid-accent empty-orbit-core grid size-22 place-items-center rounded-[30px]">
-                  <MessageCircleMore className="size-10" strokeWidth={1.6} />
-                </div>
-                <span className="orbit-note liquid-glass glass-thick text-sm">
-                  Hey there <span>👋</span>
-                </span>
-                <span className="orbit-note liquid-glass glass-thick text-sm">
-                  <span className="size-2 rounded-full bg-online" /> Let's catch
-                  up.
-                </span>
-              </div>
-              <p className="eyebrow mb-3">Your space to connect</p>
-              <h2 className="text-3xl font-bold tracking-tight">
-                Good conversations
-                <br />
-                start with a hello.
-              </h2>
-              <p className="mx-auto mt-4 max-w-75 text-sm leading-relaxed text-muted">
-                Choose a conversation, or explore People to make a new
-                connection.
-              </p>
-              <div className="liquid-glass relative mt-8 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs text-muted">
-                <span className="size-1.5 rounded-full bg-online" /> Real-time.
-                Just you and your people.
-              </div>
-            </div>
-          </section>
-        )}
-        {profileId !== null && (
-          <ProfileDialog
-            key={profileId}
-            userId={profileId}
-            me={me}
-            isOnline={isOnline}
-            onClose={() => setProfileId(null)}
-            onProfileSaved={(profile) => onMeChange(publicUser(profile))}
-            onMessage={openConversation}
-          />
-        )}
-      </div>
+      ) : (
+        <section className="grid place-items-center bg-chat p-8 text-center max-md:hidden">
+          <div className="flex max-w-72 flex-col items-center">
+            <span className="grid size-16 place-items-center rounded-full bg-accent-soft text-accent">
+              <MessageCircle className="size-7" />
+            </span>
+            <h2 className="mt-4 text-lg font-semibold tracking-[-0.01em]">
+              Select a conversation
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              Pick one from the list, or find someone new in People.
+            </p>
+          </div>
+        </section>
+      )}
+      {profileId !== null && (
+        <ProfileDialog
+          key={profileId}
+          userId={profileId}
+          me={me}
+          isOnline={isOnline}
+          onClose={() => setProfileId(null)}
+          onProfileSaved={(profile) => onMeChange(publicUser(profile))}
+          onMessage={openConversation}
+        />
+      )}
     </div>
   );
 }

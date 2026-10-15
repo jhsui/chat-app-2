@@ -4,12 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <meta name="theme-color" content="#e8eef8" />
+    <meta name="theme-color" content="#1a1a19" />
     <meta
       name="description"
-      content="A space for real-time conversations, shared moments, and your people."
+      content="Real-time one-to-one chat."
     />
-    <title>Chat — Your space to connect</title>
+    <title>Chat</title>
+    <script>
+      // Pick light or dark before the first paint, so the page doesn't flash
+      // the wrong colours while the app loads: the saved choice (see
+      // theme.tsx), or dark on a first visit. theme.tsx takes over from here.
+      (function () {
+        var theme = "dark";
+        try {
+          var saved = localStorage.getItem("chat-theme");
+          if (saved === "light") theme = "light";
+          if (saved === "system")
+            theme = matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+        } catch (e) {}
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
   </head>
 
   <body>

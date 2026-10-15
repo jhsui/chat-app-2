@@ -121,7 +121,7 @@ export default function FloatingMenu({
       ref={menuRef}
       role="menu"
       aria-label={label}
-      className="floating-menu liquid-glass glass-thick"
+      className="floating-menu"
       style={{
         width,
         top: position?.top ?? 0,

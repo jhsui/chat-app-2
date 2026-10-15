@@ -13,26 +13,25 @@ import FloatingMenu from "./components/FloatingMenu.tsx";
 
 type Theme = "system" | "light" | "dark";
 type ResolvedTheme = "light" | "dark";
+/** Also read by the inline script in index.html, which applies it before the first paint. */
 const THEME_KEY = "chat-theme";
+/** The look on a first visit, before anything has been picked. */
+const DEFAULT_THEME: Theme = "dark";
 const themeOptions = [
-  { value: "light", label: "Light", detail: "A fresh perspective", icon: Sun },
-  { value: "dark", label: "Dark", detail: "Easy on the eyes", icon: Moon },
-  {
-    value: "system",
-    label: "System",
-    detail: "Follow your device",
-    icon: SunMoon,
-  },
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: SunMoon },
 ] as const;
 
 function storedTheme(): Theme {
   try {
     const value = localStorage.getItem(THEME_KEY);
-    if (value === "light" || value === "dark") return value;
+    if (value === "light" || value === "dark" || value === "system")
+      return value;
   } catch {
     /* Appearance remains available without local storage. */
   }
-  return "system";
+  return DEFAULT_THEME;
 }
 function systemTheme(): ResolvedTheme {
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -45,7 +44,7 @@ const ThemeContext = createContext<{
   theme: Theme;
   resolvedTheme: ResolvedTheme;
   setTheme: (theme: Theme) => void;
-}>({ theme: "system", resolvedTheme: systemTheme(), setTheme: () => {} });
+}>({ theme: DEFAULT_THEME, resolvedTheme: "dark", setTheme: () => {} });
 export function useAppearance() {
   return useContext(ThemeContext);
 }
@@ -112,9 +111,9 @@ export function ThemeButton() {
         type="button"
         className={cx(
           ui.iconBtn,
-          "size-11",
-          // "!" so these beat the gray text and hover background in ui.iconBtn.
-          open && "bg-accent-soft! text-accent!",
+          "size-9",
+          // "!" so these beat the gray text in ui.iconBtn.
+          open && "bg-panel-2! text-fg!",
         )}
         onClick={() => setOpen(!open)}
         aria-label="Appearance"
@@ -122,42 +121,30 @@ export function ThemeButton() {
         aria-expanded={open}
         title={`Appearance: ${theme}`}
       >
-        <Icon className="size-[18px]" />
+        <Icon className="size-4.5" />
       </button>
       {open && anchorRef.current && (
         <FloatingMenu
           anchor={anchorRef.current}
           label="Appearance"
-          width={248}
+          width={180}
           onClose={() => setOpen(false)}
         >
-          <p className="eyebrow px-3 pt-2 pb-3">Make it your space</p>
-          {themeOptions.map(({ value, label, detail, icon: OptionIcon }) => (
+          {themeOptions.map(({ value, label, icon: OptionIcon }) => (
             <button
               key={value}
               type="button"
               role="menuitemradio"
               aria-checked={theme === value}
-              className={cx(
-                "flex min-h-14 w-full items-center gap-3 rounded-[18px] px-3 py-2 text-left transition hover:bg-panel-2 active:scale-[0.97]",
-                theme === value && "bg-accent-soft",
-              )}
+              className="menu-action"
               onClick={() => {
                 setTheme(value);
                 setOpen(false);
                 anchorRef.current?.focus({ preventScroll: true });
               }}
             >
-              <OptionIcon
-                className={cx(
-                  "size-[18px] flex-none",
-                  theme === value ? "text-accent" : "text-muted",
-                )}
-              />
-              <span className="flex-1">
-                <span className="block text-sm font-semibold">{label}</span>
-                <span className="block text-xs text-muted">{detail}</span>
-              </span>
+              <OptionIcon className="size-4 flex-none text-muted" />
+              <span className="flex-1">{label}</span>
               {theme === value && <Check className="size-4 text-accent" />}
             </button>
           ))}

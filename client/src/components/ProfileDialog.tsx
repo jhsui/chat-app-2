@@ -75,20 +75,20 @@ export default function ProfileDialog({
         e.target === dialogRef.current && dialogRef.current?.close()
       }
       aria-label={isMe ? "Your profile" : "Profile"}
-      className="profile-dialog liquid-glass glass-thick glass-unlit m-auto w-[min(440px,calc(100%-2rem))] animate-pop rounded-[32px] p-0 text-fg"
+      className="dialog m-auto w-[min(400px,calc(100%-2rem))] animate-pop p-0"
     >
-      <div className="flex items-center justify-between border-b border-line px-6 py-4">
-        <h2 className="font-bold">{isMe ? "Your profile" : "Profile"}</h2>
+      <div className="flex items-center justify-between border-b border-line py-2.5 pr-2.5 pl-5">
+        <h2 className="font-semibold">{isMe ? "Your profile" : "Profile"}</h2>
         <button
-          className={cx(ui.iconBtn, "-mr-1.5 size-11")}
+          className={cx(ui.iconBtn, "size-8")}
           onClick={() => dialogRef.current?.close()}
           aria-label="Close"
         >
-          <X className="size-5" />
+          <X className="size-4.5" />
         </button>
       </div>
 
-      <div className="p-7 max-md:p-5">
+      <div className="p-6 max-md:p-5">
         {loadError ? (
           <p className={ui.error} role="alert">
             {loadError}
@@ -128,14 +128,11 @@ function ProfileHeader({
 }) {
   return (
     <div className="mt-3 text-center">
-      <h3 className="text-xl font-bold wrap-break-word">{nameOf(profile)}</h3>
+      <h3 className="text-xl font-semibold wrap-break-word">
+        {nameOf(profile)}
+      </h3>
       <p className="text-sm text-muted">
-        @{profile.username} ·{" "}
-        <span
-          className={online ? "text-green-700 dark:text-green-300" : undefined}
-        >
-          {online ? "Online" : "Offline"}
-        </span>
+        @{profile.username} · {online ? "Online" : "Offline"}
       </p>
       <p className="mt-0.5 text-xs text-muted">
         Joined {joined(profile.createdAt)}
@@ -325,7 +322,7 @@ function EditProfile({
       )}
 
       <div className="mt-5 flex items-center justify-end gap-3">
-        {saved && !dirty && <span className="text-sm text-muted">Saved ✓</span>}
+        {saved && !dirty && <span className="text-sm text-muted">Saved</span>}
         <button
           className={ui.btnPrimary}
           type="submit"

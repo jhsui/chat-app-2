@@ -3,15 +3,8 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
 const reducedMotion = () =>
   matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** One of the spring curves defined in styles.css, for use from JavaScript. */
-function spring(name: "--ease-spring" | "--ease-spring-soft"): string {
-  const value = getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    .trim();
-  return value && CSS.supports("animation-timing-function", value)
-    ? value
-    : "cubic-bezier(0.2, 0.8, 0.2, 1)";
-}
+/** Quick to start, gentle to settle. */
+const EASE = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 
 /** The upward glide each lifted item is on, so only that one lands it. */
 const lifts = new WeakMap<HTMLElement, Animation>();
@@ -24,7 +17,7 @@ const lifts = new WeakMap<HTMLElement, Animation>();
  * technique: measure, let React move things, then animate the difference.)
  *
  * An item moving up passes over the others, so while it travels it carries
- * data-gliding="up", which styles.css uses to lift it onto a glass card.
+ * data-gliding="up", which styles.css uses to give it a solid background.
  *
  * Changing `resetKey` (e.g. switching to another tab's list) starts over, so
  * items don't fly in from where they sat in the previous list.
@@ -60,7 +53,7 @@ export function useListGlide(
       if (was === undefined) {
         item.animate(
           [{ opacity: 0, transform: "scale(0.96)" }, { opacity: 1 }],
-          { duration: 420, easing: spring("--ease-spring-soft") },
+          { duration: 250, easing: EASE },
         );
         continue;
       }
@@ -73,7 +66,7 @@ export function useListGlide(
               { transform: "none" },
             ]
           : [{ transform: `translateY(${was - now}px)` }, { transform: "none" }],
-        { duration: up ? 620 : 560, easing: spring("--ease-spring-soft") },
+        { duration: up ? 380 : 320, easing: EASE },
       );
       if (!up) continue;
       item.dataset.gliding = "up";

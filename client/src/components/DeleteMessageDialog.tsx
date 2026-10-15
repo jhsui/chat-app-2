@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { LoaderCircle, Trash2 } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import type { Message } from "../../../shared/types";
 import { errorMessage } from "../api.ts";
-import { ui } from "../ui.ts";
+import { cx, ui } from "../ui.ts";
 
 interface DeleteMessageDialogProps {
   message: Message;
@@ -30,7 +30,7 @@ export default function DeleteMessageDialog({
   return (
     <dialog
       ref={ref}
-      className="profile-dialog liquid-glass glass-thick m-auto w-[min(420px,calc(100%-1.5rem))] animate-pop rounded-[32px] p-6 text-fg"
+      className="dialog m-auto w-[min(360px,calc(100%-1.5rem))] animate-pop p-5"
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
       onClose={onClose}
@@ -41,16 +41,13 @@ export default function DeleteMessageDialog({
         if (e.target === ref.current && !busy) ref.current?.close();
       }}
     >
-      <div className="mb-5 grid size-12 place-items-center rounded-2xl bg-danger/10 text-danger">
-        <Trash2 className="size-6" />
-      </div>
-      <h2 id={titleId} className="text-xl font-bold tracking-tight">
-        Delete this message?
+      <h2 id={titleId} className="font-semibold">
+        Delete message?
       </h2>
-      <p id={descriptionId} className="mt-2 text-sm leading-relaxed text-muted">
-        This removes it for both of you. It can’t be undone.
+      <p id={descriptionId} className="mt-1 text-sm text-muted">
+        It will be removed for both of you. This can’t be undone.
       </p>
-      <blockquote className="my-5 line-clamp-3 rounded-xl border-l-2 border-line bg-panel-2 px-4 py-3 text-sm text-muted">
+      <blockquote className="my-4 line-clamp-3 rounded-lg bg-panel-2 px-3 py-2 text-sm text-muted">
         {message.image ? "Photo" : message.body}
       </blockquote>
       {error && (
@@ -62,16 +59,16 @@ export default function DeleteMessageDialog({
         <button
           ref={cancelRef}
           type="button"
-          className={`${ui.btnGhost} flex-1 text-sm whitespace-nowrap`}
+          className={cx(ui.btnGhost, "border border-line text-sm")}
           disabled={busy}
           onClick={() => ref.current?.close()}
         >
-          Keep message
+          Cancel
         </button>
         <button
           type="button"
           disabled={busy}
-          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#bf2945] px-3 text-sm whitespace-nowrap font-semibold text-white shadow-[inset_0_1px_1px_rgb(255_255_255/0.4),0_8px_20px_-8px_rgb(191_41_69/0.7)] transition hover:bg-[#a62039] active:enabled:scale-[0.96] disabled:opacity-60"
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-danger-fill px-4 text-sm font-semibold text-white transition-opacity hover:enabled:opacity-90 disabled:opacity-60"
           onClick={async () => {
             if (busy) return;
             setBusy(true);
@@ -86,7 +83,7 @@ export default function DeleteMessageDialog({
           }}
         >
           {busy && <LoaderCircle className="size-4 animate-spin" />}
-          {busy ? "Deleting…" : "Delete message"}
+          {busy ? "Deleting…" : "Delete"}
         </button>
       </div>
     </dialog>
