@@ -151,10 +151,52 @@
 
 @layer components {
   /* Sidebar and chat side by side; one at a time on phones. */
+  /* --sidebar-w is set by the drag handle (SidebarResizer); the chat
+     always keeps at least 360px, however wide the sidebar was left. */
   .app-shell {
+    --sidebar-track: min(var(--sidebar-w, 320px), calc(100% - 360px));
+    position: relative;
     display: grid;
-    grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-track) minmax(0, 1fr);
     height: 100dvh;
+  }
+  /* A strip over the sidebar's right border; its line lights up when the
+     handle is hovered, focused or dragged. */
+  .sidebar-resizer {
+    position: absolute;
+    z-index: 30;
+    inset-block: 0;
+    left: var(--sidebar-track);
+    width: 9px;
+    margin-left: -5px;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .sidebar-resizer::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    left: 3px;
+    width: 3px;
+    background: transparent;
+    transition: background 150ms;
+  }
+  .sidebar-resizer:hover::after {
+    background: var(--line);
+    transition-delay: 150ms;
+  }
+  .sidebar-resizer:focus-visible {
+    outline: none;
+  }
+  .sidebar-resizer:focus-visible::after,
+  .sidebar-resizer[data-dragging]::after {
+    background: var(--accent);
+    transition-delay: 0ms;
+  }
+  :root[data-resizing],
+  :root[data-resizing] * {
+    cursor: col-resize !important;
+    user-select: none !important;
   }
   .conversation-row {
     display: flex;

@@ -12,6 +12,7 @@ import type {
 import { ApiError, api } from "../api.ts";
 import type { ChatImage } from "../image.ts";
 import Sidebar from "./Sidebar.tsx";
+import SidebarResizer from "./SidebarResizer.tsx";
 import ChatWindow from "./ChatWindow.tsx";
 import ProfileDialog from "./ProfileDialog.tsx";
 
@@ -416,6 +417,7 @@ export default function ChatPage({ me, onMeChange, onLogout }: ChatPageProps) {
         onShowProfile={() => setProfileId(me.id)}
         onLogout={handleLogout}
       />
+      <SidebarResizer />
       {active ? (
         <ChatWindow
           key={active.id}

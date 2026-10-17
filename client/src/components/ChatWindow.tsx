@@ -778,10 +778,7 @@ export default function ChatWindow({
         <header className="grid min-h-14 grid-cols-[1fr_minmax(0,auto)_1fr] items-center px-2">
           <div>
             <button
-              className={cx(
-                ui.iconBtn,
-                "size-10 text-accent hover:enabled:text-accent md:hidden",
-              )}
+              className="grid size-10 flex-none place-items-center rounded-full text-accent transition-colors hover:bg-panel-2 md:hidden"
               onClick={onBack}
               aria-label="Back to conversations"
             >

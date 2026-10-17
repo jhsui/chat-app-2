@@ -9,7 +9,7 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 - Sign up / sign in with username and password (passwords hashed with bcrypt)
 - **Chats | People** tabs in the sidebar: People lists every user, online first, then by most recent chat
 - **Profiles:** upload an avatar (cropped and resized in the browser, stored in Supabase Storage), set a display name and a short bio, and view other people's profiles. Changes show up live for everyone
-- Filter existing conversations in **Chats**, or use **New chat / People** to find someone by username or display name
+- Filter existing conversations in **Chats**, or find anyone by username or display name in **People**
 - Messages arrive instantly over WebSockets and are saved to PostgreSQL
 - **Images:** attach a picture with the image button or paste one from the clipboard; it's shrunk in the browser, stored in a private Supabase Storage bucket that only the two people in the conversation can load from, and opens full-size when clicked
 - Conversation list sorted by latest message, with unread badges
@@ -23,6 +23,7 @@ A real-time chat web app with user accounts and private 1:1 direct messages.
 - Message history with "load older" pagination
 - Works across multiple tabs, reconnects automatically, light/dark/system appearance with a saved preference, and a mobile layout
 - A Messages-style layout: your bubbles in the accent color (a deep teal), theirs in grey, a tail on the last bubble of each run, reactions pinned to the bubble's corner, and the date and time over the first message of the day and after a long pause. A message you send rises out of the message box into place, and on wide screens the conversation sits in a centred column
+- Resizable sidebar on wide screens: drag its edge (or focus it and use the arrow keys); the width is remembered and a double-click resets it
 - Responsive layout, keyboard-accessible tabs, reduced-motion support, loading skeletons, and a jump-to-latest button when reading history
 
 ## Getting started

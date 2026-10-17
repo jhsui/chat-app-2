@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { LogOut, Search, SquarePen } from "lucide-react";
+import { LogOut, Search, Users } from "lucide-react";
 import type { Conversation, Person, PublicUser } from "../../../shared/types";
 import { formatShort, nameOf } from "../format.ts";
 import { cx, ui } from "../ui.ts";
@@ -99,7 +99,6 @@ export default function Sidebar({
 }: SidebarProps) {
   const [tab, setTab] = useState<Tab>("chats");
   const [query, setQuery] = useState("");
-  const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   // Rows glide to their new place when the order changes (a new message
   // bumps a chat to the top, someone comes online).
@@ -133,30 +132,18 @@ export default function Sidebar({
   return (
     // On narrow screens the sidebar hides while a chat is open.
     <aside
+      id="sidebar"
       className={cx(
         "flex min-h-0 min-w-0 flex-col border-r border-line bg-sidebar [--surface:var(--sidebar)] max-md:border-r-0",
         activeId !== undefined && "max-md:hidden",
       )}
     >
-      <header className="flex items-center justify-between px-4 pt-4 pb-3">
+      <header className="px-4 pt-4 pb-3">
         <h1 className="text-[22px] font-bold tracking-[-0.02em]">Messages</h1>
-        <button
-          type="button"
-          className={cx(ui.iconBtn, "size-9 text-accent hover:enabled:text-accent")}
-          onClick={() => {
-            switchTab("people");
-            searchRef.current?.focus();
-          }}
-          aria-label="New chat"
-          title="New chat"
-        >
-          <SquarePen className="size-5" />
-        </button>
       </header>
       <div className="relative mx-3">
         <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted" />
         <input
-          ref={searchRef}
           type="search"
           className="h-8 w-full rounded-lg bg-panel-2 pr-2 pl-8 text-sm outline-none placeholder:text-muted focus:ring-3 focus:ring-accent-soft"
           placeholder="Search"
@@ -210,12 +197,26 @@ export default function Sidebar({
           People
         </button>
       </div>
+      {/* What the People tab is: not contacts or friends, but everyone. */}
+      {tab === "people" && (
+        <p
+          id="people-note"
+          className="mx-3 mt-3 flex items-center gap-2 px-1.5 text-[13px] font-medium"
+        >
+          <Users className="size-4 flex-none text-muted" aria-hidden="true" />
+          Everyone on Chat
+          <span className="ml-auto text-xs font-normal text-muted tabular-nums">
+            {people.length} {people.length === 1 ? "person" : "people"}
+          </span>
+        </p>
+      )}
       {/* Keyed by tab, so switching tabs starts a fresh list. */}
       <ul
         key={tab}
         ref={listRef}
         id="sidebar-list"
         aria-labelledby={`tab-${tab}`}
+        aria-describedby={tab === "people" ? "people-note" : undefined}
         className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
         role="tabpanel"
       >
