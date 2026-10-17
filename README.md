@@ -1,4 +1,4 @@
-# Chat App
+# Natter
 
 A real-time chat web app with user accounts and private 1:1 direct messages.
 
@@ -152,7 +152,7 @@ send message      ── socket ─────▶  validate, save, emit to both
 ## Project structure
 
 ```
-chat-app/
+natter-chat/
 ├── package.json             root: workspaces + scripts
 ├── shared/
 │   └── types.d.ts           types shared by server and client (data, API, socket events)

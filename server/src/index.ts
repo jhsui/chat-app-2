@@ -39,7 +39,7 @@ chat.httpServer.listen(PORT, () => {
       ? `embedded PGlite in ${dbConfig.pgliteDir}`
       : "PostgreSQL (DATABASE_URL)";
   console.log(
-    `Chat server listening on http://localhost:${PORT} — database: ${where}`,
+    `Natter server listening on http://localhost:${PORT} — database: ${where}`,
   );
 });
 

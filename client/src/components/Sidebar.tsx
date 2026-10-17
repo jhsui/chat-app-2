@@ -204,7 +204,7 @@ export default function Sidebar({
           className="mx-3 mt-3 flex items-center gap-2 px-1.5 text-[13px] font-medium"
         >
           <Users className="size-4 flex-none text-muted" aria-hidden="true" />
-          Everyone on Chat
+          Everyone on Natter
           <span className="ml-auto text-xs font-normal text-muted tabular-nums">
             {people.length} {people.length === 1 ? "person" : "people"}
           </span>

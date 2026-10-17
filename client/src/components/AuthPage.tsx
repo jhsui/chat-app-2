@@ -78,7 +78,7 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
       <aside className="auth-panel hidden flex-col p-10 md:flex">
         <div className="flex items-center gap-2.5">
           <Brand size={32} />
-          <span className="text-lg font-semibold tracking-[-0.01em]">Chat</span>
+          <span className="text-lg font-semibold tracking-[-0.01em]">Natter</span>
         </div>
         <ConversationPreview />
         <p className="max-w-80 text-sm text-muted">
@@ -96,7 +96,7 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
               <Brand size={52} />
             </span>
             <h1 className="text-[26px] font-semibold tracking-[-0.02em]">
-              {isLogin ? "Sign in to Chat" : "Create your account"}
+              {isLogin ? "Sign in to Natter" : "Create your account"}
             </h1>
           </div>
           <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
